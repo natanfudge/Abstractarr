@@ -42,7 +42,7 @@ private fun abstractClass(api: ClassApi, destPath: Path, metadata: AbstractionMe
 
 }
 
-
+// slight change
 private fun String?.toApiPackageName(metadata: AbstractionMetadata) =  "${metadata.versionPackage}.${this ?: ""}"
 private fun String.toApiClassName() =  "I$this"
 
