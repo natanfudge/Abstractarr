@@ -42,5 +42,6 @@ test {
 apply plugin: MetaUtils
 
 metaUtils {
-    createJarTest("testOriginalJar")
+    def mcJar = createJarTest("testOriginalJar")
+    sourceSets.test.runtimeClasspath += mcJar.output
 }

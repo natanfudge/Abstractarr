@@ -22,6 +22,10 @@ public class TestConcreteClass extends TestSuperClass {
         return "SomeString";
     }
 
+    public static int publicStatic(){
+        return 4;
+    }
+
     int packageArgs(TestOtherClass arg1, int arg2) {
         return 1;
     }
