@@ -18,20 +18,40 @@ object Abstractor {
         for (classApi in ClassApi.readFromJar(mcJar)) {
             if (!classApi.isPublicApi) continue
 //                val destPath = destFs.getPath(/*classApi.fullyQualifiedName.replace(".", "/")*/ "/")
-            AbstractorImpl(metadata).abstractClass(classApi, destDir)
+            AbstractorImpl(metadata).abstractClass(classApi, destDir, outerClass = null)
         }
 //        }
     }
 }
 
 private class AbstractorImpl(private val metadata: AbstractionMetadata) {
-    fun abstractClass(api: ClassApi, destPath: Path) {
+    /**
+     * destPath == null and outerClass != null when it's an inner class
+     */
+    fun abstractClass(api: ClassApi, destPath: Path?, outerClass: JavaGeneratedClass?) {
         check(api.visibility == ClassVisibility.Public)
-        JavaCodeGenerator.writeClass(
-            packageName = api.packageName.toApiPackageName(), name = api.className.toApiClassName(),
-            visibility = api.visibility, isAbstract = false, isInterface = true, writeTo = destPath
-        ) { addClassBody(api) }
 
+        // No need to add I for inner classes
+        val className = if (outerClass == null) api.className.toApiClassName() else api.className
+        val visibility = api.visibility
+        val isAbstract = false
+        val isInterface = true
+
+        if (destPath != null) {
+            JavaCodeGenerator.writeClass(
+                packageName = api.packageName.toApiPackageName(), name = className,
+                visibility = visibility, isAbstract = isAbstract, isInterface = isInterface, writeTo = destPath
+            ) { addClassBody(api) }
+        } else {
+            requireNotNull(outerClass)
+            outerClass.addInnerClass(
+                name = className,
+                visibility = visibility,
+                isAbstract = isAbstract,
+                isInterface = isInterface,
+                isStatic = true
+            ) { addClassBody(api) }
+        }
     }
 
     private fun String?.toApiPackageName() = "${metadata.versionPackage}.${this ?: ""}"
@@ -62,7 +82,36 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
             if (!field.isFinal) {
                 addSetter(field, mcClassType)
             }
+        }
 
+        for (innerClass in api.innerClasses) {
+            if (!innerClass.isPublic) continue
+            abstractClass(innerClass, destPath = null, outerClass = this)
+
+            // Inner classes are constructed by their parent
+            if (!innerClass.isStatic) {
+                for (constructor in innerClass.methods.filter { it.isConstructor }) {
+                    val constructedInnerClass = innerClass.nameAsType().remapToApiClass()
+                    addMethod(
+                        name = "new" + innerClass.className,
+                        visibility = Visibility.Public,
+                        static = false,
+                        final = false,
+                        abstract = false,
+                        returnType = constructedInnerClass,
+                        parameters = apiParametersDeclaration(constructor)
+                    ) {
+                        addStatement(
+                            Statement.Return(
+                                Expression.Call.Constructor(
+                                    constructing = constructedInnerClass,
+                                    parameters = apiPassedParameters(constructor)
+                                ).castFromApiClass(constructedInnerClass)
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 
@@ -73,7 +122,7 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         addField(
             name = field.name, final = true, static = true, visibility = Visibility.Public,
             type = field.descriptor.remapToApiClass(),
-            initializer = abstractedFieldExpression(field, mcClassType).castToApiClass(field.descriptor)
+            initializer = abstractedFieldExpression(field, mcClassType).castFromMcToApiClass(field.descriptor)
         )
     }
 
@@ -90,10 +139,12 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
             static = field.isStatic,
             final = false
         ) {
-            addStatement(Statement.Assignment(
-                target = abstractedFieldExpression(field, mcClassType),
-                assignedValue = Expression.Variable(field.name).castIfNeededTo(field.descriptor)
-            ))
+            addStatement(
+                Statement.Assignment(
+                    target = abstractedFieldExpression(field, mcClassType),
+                    assignedValue = Expression.Variable(field.name).castFromMcClass(field.descriptor)
+                )
+            )
         }
     }
 
@@ -112,16 +163,10 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         ) {
             val fieldAccess = abstractedFieldExpression(field, mcClassType)
 
-            addStatement(Statement.Return(fieldAccess.castToApiClass(field.descriptor)))
+            addStatement(Statement.Return(fieldAccess.castFromMcToApiClass(field.descriptor)))
         }
     }
 
-    private fun Expression.castToApiClass(type: AnyType): Expression =
-        if (type.isMcClass()) this.castTo(type.remapToApiClass()) else this
-
-
-    private fun Expression.castIfNeededTo(type: AnyType): Expression =
-        if (type.isMcClass()) this.castTo(type) else this
 
     private fun abstractedFieldExpression(
         field: ClassApi.Field,
@@ -138,10 +183,14 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         api: ClassApi,
         mcClassType: ObjectType
     ) {
+        // Only public methods are abstracted
         if (!method.isPublic) return
+        // Abstract classes/interfaces can't be constructed directly
         if (method.isConstructor && (api.isInterface || api.isAbstract)) return
+        // Inner classes need to be constructed by their parent class
+        if (method.isConstructor && !api.isStatic) return
 
-        val parameters = method.parameters.mapValues { (_, v) -> v.remapToApiClass() }.toMap()
+        val parameters = apiParametersDeclaration(method)
 
         val returnType = (if (method.isConstructor) api.nameAsType() else method.returnType).remapToApiClass()
 
@@ -153,10 +202,7 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
             abstract = false,
             returnType = returnType
         ) {
-            val passedParameters = method.parameters.map { (name, type) ->
-                val variable = Expression.Variable(name)
-                if (type.isMcClass()) variable.castTo(type) else variable
-            }
+            val passedParameters = apiPassedParameters(method)
             val call = if (method.isConstructor) {
                 Expression.Call.Constructor(
                     constructing = mcClassType,
@@ -171,16 +217,33 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
                 )
             }
 
-
             addStatement(
                 if (!method.isVoid || method.isConstructor) {
                     check(returnType is AnyType) // because it's not void
-                    val returnedValue = if (returnType.isApiClass()) call.castTo(returnType) else call
+                    val returnedValue = call.castFromApiClass(returnType)
                     Statement.Return(returnedValue)
                 } else call
             )
         }
     }
+
+    private fun apiPassedParameters(method: ClassApi.Method) =
+        method.parameters.map { (name, type) -> Expression.Variable(name).castFromMcClass(type) }
+
+
+    private fun Expression.castFromMcToApiClass(type: AnyType): Expression =
+        if (type.isMcClass()) this.castTo(type.remapToApiClass()) else this
+
+
+    private fun Expression.castFromMcClass(type: AnyType): Expression =
+        if (type.isMcClass()) this.castTo(type) else this
+
+
+    private fun Expression.castFromApiClass(type: AnyType): Expression =
+        if (type.isApiClass()) this.castTo(type) else this
+
+    private fun apiParametersDeclaration(method: ClassApi.Method) =
+        method.parameters.mapValues { (_, v) -> v.remapToApiClass() }.toMap()
 
 
     private fun String.isMcClass(): Boolean = startsWith("net/minecraft/")
@@ -193,7 +256,7 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
 }
 
 //TODO:
-// inner classes
+// non-static inner classes
 // abstract classes
 // interfaces
 // enums
@@ -202,4 +265,4 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
 // annotations (nullable etc)
 // arrays
 // generics
-
+// think about what happens when there is anon classes or lambdas
