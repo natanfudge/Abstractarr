@@ -9,6 +9,7 @@ class TestAbstraction {
 
     @Test
     fun testAbstraction() {
+
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
         Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = "v1"))
@@ -17,30 +18,32 @@ class TestAbstraction {
         val compiler = ToolProvider.getSystemJavaCompiler()
 
         val diagnostics = DiagnosticCollector<JavaFileObject>()
-        val fileManager = compiler.getStandardFileManager(diagnostics, null, null)
+        compiler.getStandardFileManager(diagnostics, null, null).use { fileManager ->
+            val compilationUnits = fileManager.getJavaFileObjectsFromFiles(
+                dest.recursiveChildren().filter { !it.isDirectory() }.map { it.toFile() }.toList()
+            )
 
-        val compilationUnits = fileManager.getJavaFileObjectsFromFiles(
-            dest.recursiveChildren().filter { !it.isDirectory() }.map { it.toFile() }.toList()
-        )
+            try {
+                compiler.getTask(
+                    null, fileManager, diagnostics,
+                    listOf("-classpath", System.getProperty("java.class.path")), null, compilationUnits
+                ).call()
 
-        compiler.getTask(
-            null, fileManager, diagnostics,
-            listOf("-classpath", System.getProperty("java.class.path")), null, compilationUnits
-        ).call()
+                assert(diagnostics.diagnostics.isEmpty()) {
+                    "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
+                }
+            } finally {
+                dest.recursiveChildren().forEach { if (it.hasExtension(".class")) it.delete() }
+            }
 
-        assert(diagnostics.diagnostics.isEmpty()) {
-            "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
         }
+
+
 //        for (diagnostic in diagnostics.diagnostics) System.out.format(
 //            "Error on line %d in %s%n",
 //            diagnostic.lineNumber,
 //            diagnostic.source.toUri()
 //        )
-
-
-        fileManager.close()
-
-        dest.recursiveChildren().forEach { if (it.hasExtension(".class")) it.delete() }
 
     }
 

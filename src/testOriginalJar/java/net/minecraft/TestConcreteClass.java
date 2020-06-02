@@ -6,8 +6,10 @@ public class TestConcreteClass extends TestSuperClass {
     protected int protectedField;
     public int publicField;
     public final int publicFinalField = 2;
+    public TestOtherClass otherClassField;
     private static String privateStaticField;
     public static String publicStaticField;
+    public static final TestOtherClass publicStaticOtherClassField = new TestOtherClass();
     public static final String publicStaticFinalField = "BAR";
 
     private void privateVoid() {

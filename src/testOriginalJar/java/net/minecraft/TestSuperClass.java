@@ -1,7 +1,7 @@
 package net.minecraft;
 
 public class TestSuperClass {
-    public TestSuperClass(TestOtherClass otherParam){
+    public TestSuperClass(TestOtherClass otherParam) {
 
     }
 }
