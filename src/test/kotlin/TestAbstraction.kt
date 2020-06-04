@@ -1,5 +1,6 @@
 import org.junit.jupiter.api.Test
 import testing.getResource
+import java.nio.file.Paths
 import javax.tools.DiagnosticCollector
 import javax.tools.JavaFileObject
 import javax.tools.ToolProvider
@@ -13,7 +14,6 @@ class TestAbstraction {
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
         Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = "v1"))
-//        debugResultJar(dest)
 
         val compiler = ToolProvider.getSystemJavaCompiler()
 
@@ -23,29 +23,31 @@ class TestAbstraction {
                 dest.recursiveChildren().filter { !it.isDirectory() }.map { it.toFile() }.toList()
             )
 
-            try {
-                compiler.getTask(
-                    null, fileManager, diagnostics,
-                    listOf("-classpath", System.getProperty("java.class.path")), null, compilationUnits
-                ).call()
-
-                assert(diagnostics.diagnostics.isEmpty()) {
-                    "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
-                }
-            } finally {
-                dest.recursiveChildren().forEach { if (it.hasExtension(".class")) it.delete() }
-            }
-
+            compiler.getTask(
+                null, fileManager, diagnostics,
+                listOf("-classpath", System.getProperty("java.class.path")), null, compilationUnits
+            ).call()
         }
 
+        assert(diagnostics.diagnostics.isEmpty()) {
+            "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
+        }
 
-//        for (diagnostic in diagnostics.diagnostics) System.out.format(
-//            "Error on line %d in %s%n",
-//            diagnostic.lineNumber,
-//            diagnostic.source.toUri()
-//        )
-
+        val compiledDestDir = Paths.get("${dest}Compiled")
+        dest.recursiveChildren().forEach {
+            if (it.hasExtension(".class")) {
+                val relativePath = dest.relativize(it)
+                val target = compiledDestDir.resolve(relativePath.toString())
+                target.parent.createDirectories()
+                if (!it.isDirectory()) {
+                    it.copyTo(target)
+                    it.delete()
+                }
+            }
+        }
+        val compiledJar = compiledDestDir.zipToJar()
     }
+
 
 }
 

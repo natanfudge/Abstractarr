@@ -5,6 +5,16 @@ import java.nio.file.Path
 
 data class AbstractionMetadata(val versionPackage: String)
 
+//TODO:
+// enums
+// baseclasses
+// - superclasses
+// annotations (nullable etc)
+// arrays
+// generics
+// think about what happens when there is anon classes or lambdas
+
+
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
         require(destDir.parent.exists()) { "The chosen destination path '$destDir' is not in any existing directory." }
@@ -18,30 +28,33 @@ object Abstractor {
         for (classApi in ClassApi.readFromJar(mcJar)) {
             if (!classApi.isPublicApi) continue
 //                val destPath = destFs.getPath(/*classApi.fullyQualifiedName.replace(".", "/")*/ "/")
-            AbstractorImpl(metadata).abstractClass(classApi, destDir, outerClass = null)
+            ClassAbstractor(metadata, classApi).abstractClass(destDir, outerClass = null)
         }
 //        }
     }
 }
 
-private class AbstractorImpl(private val metadata: AbstractionMetadata) {
+
+
+private class ClassAbstractor(private val metadata: AbstractionMetadata, private val classApi: ClassApi) {
+
     /**
      * destPath == null and outerClass != null when it's an inner class
      */
-    fun abstractClass(api: ClassApi, destPath: Path?, outerClass: JavaGeneratedClass?) {
-        check(api.visibility == ClassVisibility.Public)
+    fun abstractClass(destPath: Path?, outerClass: JavaGeneratedClass?) {
+        check(classApi.visibility == ClassVisibility.Public)
 
         // No need to add I for inner classes
-        val className = if (outerClass == null) api.className.toApiClassName() else api.className
-        val visibility = api.visibility
+        val className = if (outerClass == null) classApi.className.toApiClassName() else classApi.className
+        val visibility = classApi.visibility
         val isAbstract = false
         val isInterface = true
 
         if (destPath != null) {
             JavaCodeGenerator.writeClass(
-                packageName = api.packageName.toApiPackageName(), name = className,
+                packageName = classApi.packageName.toApiPackageName(), name = className,
                 visibility = visibility, isAbstract = isAbstract, isInterface = isInterface, writeTo = destPath
-            ) { addClassBody(api) }
+            ) { addClassBody() }
         } else {
             requireNotNull(outerClass)
             outerClass.addInnerClass(
@@ -50,7 +63,7 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
                 isAbstract = isAbstract,
                 isInterface = isInterface,
                 isStatic = true
-            ) { addClassBody(api) }
+            ) { addClassBody() }
         }
     }
 
@@ -65,13 +78,13 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         } else it
     }
 
-    private fun JavaGeneratedClass.addClassBody(api: ClassApi) {
-        val mcClassType = api.nameAsType()
-        for (method in api.methods) {
-            abstractMethod(method, api, mcClassType)
+    private fun JavaGeneratedClass.addClassBody() {
+        val mcClassType = classApi.nameAsType()
+        for (method in classApi.methods) {
+            abstractMethod(method, mcClassType)
         }
 
-        for (field in api.fields) {
+        for (field in classApi.fields) {
             if (!field.isPublic) continue
             if (field.isFinal && field.isStatic) {
                 addConstant(field, mcClassType)
@@ -84,33 +97,38 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
             }
         }
 
-        for (innerClass in api.innerClasses) {
+        for (innerClass in classApi.innerClasses) {
             if (!innerClass.isPublic) continue
-            abstractClass(innerClass, destPath = null, outerClass = this)
+            ClassAbstractor(metadata,innerClass).abstractClass(destPath = null, outerClass = this)
 
             // Inner classes are constructed by their parent
             if (!innerClass.isStatic) {
-                for (constructor in innerClass.methods.filter { it.isConstructor }) {
-                    val constructedInnerClass = innerClass.nameAsType().remapToApiClass()
-                    addMethod(
-                        name = "new" + innerClass.className,
-                        visibility = Visibility.Public,
-                        static = false,
-                        final = false,
-                        abstract = false,
-                        returnType = constructedInnerClass,
-                        parameters = apiParametersDeclaration(constructor)
-                    ) {
-                        addStatement(
-                            Statement.Return(
-                                Expression.Call.Constructor(
-                                    constructing = constructedInnerClass,
-                                    parameters = apiPassedParameters(constructor)
-                                ).castFromApiClass(constructedInnerClass)
-                            )
-                        )
-                    }
-                }
+                addInnerClassConstructor(innerClass)
+            }
+        }
+    }
+
+    private fun JavaGeneratedClass.addInnerClassConstructor(innerClass: ClassApi) {
+        for (constructor in innerClass.methods.filter { it.isConstructor }) {
+            val constructedInnerClass = innerClass.nameAsType()
+            addMethod(
+                name = "new" + innerClass.className,
+                visibility = Visibility.Public,
+                static = false,
+                final = false,
+                abstract = false,
+                returnType = constructedInnerClass.remapToApiClass(),
+                parameters = apiParametersDeclaration(constructor)
+            ) {
+                addStatement(
+                    Statement.Return(
+                        Expression.Call.Constructor(
+                            constructing = innerClass.innerClassNameAsType(),
+                            parameters = apiPassedParameters(constructor),
+                            receiver = Expression.This.castTo(classApi.nameAsType())
+                        ).castFromMcToApiClass(constructedInnerClass, doubleCast = doubleCastRequired(innerClass))
+                    )
+                )
             }
         }
     }
@@ -163,7 +181,11 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         ) {
             val fieldAccess = abstractedFieldExpression(field, mcClassType)
 
-            addStatement(Statement.Return(fieldAccess.castFromMcToApiClass(field.descriptor)))
+            addStatement(
+                Statement.Return(
+                    fieldAccess.castFromMcToApiClass(field.descriptor)
+                )
+            )
         }
     }
 
@@ -180,19 +202,18 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
 
     private fun JavaGeneratedClass.abstractMethod(
         method: ClassApi.Method,
-        api: ClassApi,
         mcClassType: ObjectType
     ) {
         // Only public methods are abstracted
         if (!method.isPublic) return
         // Abstract classes/interfaces can't be constructed directly
-        if (method.isConstructor && (api.isInterface || api.isAbstract)) return
+        if (method.isConstructor && (classApi.isInterface || classApi.isAbstract)) return
         // Inner classes need to be constructed by their parent class
-        if (method.isConstructor && !api.isStatic) return
+        if (classApi.isInnerClass && method.isConstructor && !classApi.isStatic) return
 
         val parameters = apiParametersDeclaration(method)
 
-        val returnType = (if (method.isConstructor) api.nameAsType() else method.returnType).remapToApiClass()
+        val returnType = (if (method.isConstructor) classApi.nameAsType() else method.returnType).remapToApiClass()
 
         addMethod(
             name = if (method.isConstructor) "create" else method.name,
@@ -206,7 +227,8 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
             val call = if (method.isConstructor) {
                 Expression.Call.Constructor(
                     constructing = mcClassType,
-                    parameters = passedParameters
+                    parameters = passedParameters,
+                    receiver = null
                 )
             } else {
                 Expression.Call.Method(
@@ -227,16 +249,23 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
         }
     }
 
-    private fun apiPassedParameters(method: ClassApi.Method) =
-        method.parameters.map { (name, type) -> Expression.Variable(name).castFromMcClass(type) }
+    //TODO: this will forcecast everything... Need to check how bad is runtime overhead and if we can check
+    // the finalness of parameters individually
+    private fun apiPassedParameters(method: ClassApi.Method): List<Expression> =
+        method.parameters.map { (name, type) -> Expression.Variable(name).castFromMcClass(type, doubleCast = true) }
+
+    /**
+     * For any type Child, and type Super, such that Super is a supertype of Child:
+     * Casting from Child[] to Super[] is valid,
+     * Casting from Super[] to Child[] will always fail.
+     */
+
+    private fun Expression.castFromMcToApiClass(type: AnyType, doubleCast: Boolean? = null): Expression =
+        if (type.isMcClass()) this.castTo(type.remapToApiClass(),doubleCast) else this
 
 
-    private fun Expression.castFromMcToApiClass(type: AnyType): Expression =
-        if (type.isMcClass()) this.castTo(type.remapToApiClass()) else this
-
-
-    private fun Expression.castFromMcClass(type: AnyType): Expression =
-        if (type.isMcClass()) this.castTo(type) else this
+    private fun Expression.castFromMcClass(type: AnyType, doubleCast: Boolean? = null): Expression =
+        if (type.isMcClass()) castTo(type,  doubleCast) else this
 
 
     private fun Expression.castFromApiClass(type: AnyType): Expression =
@@ -253,16 +282,9 @@ private class AbstractorImpl(private val metadata: AbstractionMetadata) {
 
     private fun Descriptor.isApiClass(): Boolean =
         this is ObjectType && className.isApiClass()
-}
 
-//TODO:
-// non-static inner classes
-// abstract classes
-// interfaces
-// enums
-// baseclasses
-// - superclasses
-// annotations (nullable etc)
-// arrays
-// generics
-// think about what happens when there is anon classes or lambdas
+    private fun doubleCastRequired(classApi: ClassApi)  = classApi.isFinal
+
+    private fun Expression.castTo(type: AnyType, forceDoubleCast : Boolean? = null) : Expression
+            = castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
+}
