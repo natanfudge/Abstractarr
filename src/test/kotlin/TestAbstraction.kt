@@ -29,9 +29,6 @@ class TestAbstraction {
             ).call()
         }
 
-        assert(diagnostics.diagnostics.isEmpty()) {
-            "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
-        }
 
         val compiledDestDir = Paths.get("${dest}Compiled")
         dest.recursiveChildren().forEach {
@@ -45,7 +42,11 @@ class TestAbstraction {
                 }
             }
         }
-        val compiledJar = compiledDestDir.zipToJar()
+        compiledDestDir.zipToJar()
+
+        assert(diagnostics.diagnostics.isEmpty()) {
+            "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
+        }
     }
 
 

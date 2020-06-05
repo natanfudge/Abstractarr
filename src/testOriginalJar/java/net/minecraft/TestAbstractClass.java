@@ -1,8 +1,7 @@
 package net.minecraft;
 
-import v1.net.minecraft.ITestAbstractClass;
 
-public abstract class TestAbstractClass implements ITestAbstractClass {
+public abstract class TestAbstractClass {
     public int field;
 
     public abstract TestAbstractClass abstractMethod();

@@ -1,17 +1,13 @@
 package test
 
-import net.minecraft.TestConcreteClass
-import net.minecraft.TestOtherClass
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.ITestConcreteClass
 import v1.net.minecraft.ITestOtherClass
 import kotlin.test.assertEquals
 
 class TestResult {
-    //TODO: create new project for runtime asm (interface attaching), and use it to transform the testOriginalJar after build.
     @Test
     fun testConcreteClass() {
-
         assert(ITestConcreteClass.publicStaticOtherClassField is ITestOtherClass)
         assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
         assertEquals(ITestConcreteClass.publicStatic(), 4)
@@ -59,9 +55,5 @@ class TestResult {
         }
 
     }
-
-
-
-//
 
 }

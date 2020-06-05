@@ -1,9 +1,7 @@
 package net.minecraft;
 
 
-import v1.net.minecraft.ITestOtherClass;
-
-public class TestOtherClass implements ITestOtherClass {
+public class TestOtherClass {
     public void oneCastTest(TestConcreteClass x) {
         ((TestInterface)x).bar();
     }

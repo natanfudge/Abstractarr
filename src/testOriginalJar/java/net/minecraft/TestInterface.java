@@ -1,8 +1,7 @@
 package net.minecraft;
 
-import v1.net.minecraft.ITestInterface;
 
-public interface TestInterface extends ITestInterface {
+public interface TestInterface  {
     TestInterface foo();
 
     default int bar() {

@@ -6,6 +6,9 @@ import java.nio.file.Path
 data class AbstractionMetadata(val versionPackage: String)
 
 //TODO:
+// deal with mc classes that extend non minecraft classes
+// apply interfaces only at runtime
+// don't provide api for overriden methods (that should be exposed through interface extension)
 // enums
 // baseclasses
 // - superclasses
@@ -35,7 +38,6 @@ object Abstractor {
 }
 
 
-
 private class ClassAbstractor(private val metadata: AbstractionMetadata, private val classApi: ClassApi) {
 
     /**
@@ -50,19 +52,22 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
         val isAbstract = false
         val isInterface = true
 
+        val superInterfaces = (classApi.superClass?.let { classApi.superInterfaces + it } ?: classApi.superInterfaces)
+//            .filter { it.isMcClass() }
+            .map { it.remapToApiClass() }
+
         if (destPath != null) {
             JavaCodeGenerator.writeClass(
                 packageName = classApi.packageName.toApiPackageName(), name = className,
-                visibility = visibility, isAbstract = isAbstract, isInterface = isInterface, writeTo = destPath
+                visibility = visibility, isAbstract = isAbstract, isInterface = isInterface, writeTo = destPath,
+                superClass = null, superInterfaces = superInterfaces
             ) { addClassBody() }
         } else {
             requireNotNull(outerClass)
             outerClass.addInnerClass(
                 name = className,
-                visibility = visibility,
-                isAbstract = isAbstract,
-                isInterface = isInterface,
-                isStatic = true
+                visibility = visibility, isAbstract = isAbstract, isInterface = isInterface, isStatic = true,
+                superClass = null, superInterfaces = superInterfaces
             ) { addClassBody() }
         }
     }
@@ -99,7 +104,7 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
 
         for (innerClass in classApi.innerClasses) {
             if (!innerClass.isPublic) continue
-            ClassAbstractor(metadata,innerClass).abstractClass(destPath = null, outerClass = this)
+            ClassAbstractor(metadata, innerClass).abstractClass(destPath = null, outerClass = this)
 
             // Inner classes are constructed by their parent
             if (!innerClass.isStatic) {
@@ -261,11 +266,11 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
      */
 
     private fun Expression.castFromMcToApiClass(type: AnyType, doubleCast: Boolean? = null): Expression =
-        if (type.isMcClass()) this.castTo(type.remapToApiClass(),doubleCast) else this
+        if (type.isMcClass()) this.castTo(type.remapToApiClass(), doubleCast) else this
 
 
     private fun Expression.castFromMcClass(type: AnyType, doubleCast: Boolean? = null): Expression =
-        if (type.isMcClass()) castTo(type,  doubleCast) else this
+        if (type.isMcClass()) castTo(type, doubleCast) else this
 
 
     private fun Expression.castFromApiClass(type: AnyType): Expression =
@@ -283,8 +288,8 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
     private fun Descriptor.isApiClass(): Boolean =
         this is ObjectType && className.isApiClass()
 
-    private fun doubleCastRequired(classApi: ClassApi)  = classApi.isFinal
+    private fun doubleCastRequired(classApi: ClassApi) = classApi.isFinal
 
-    private fun Expression.castTo(type: AnyType, forceDoubleCast : Boolean? = null) : Expression
-            = castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
+    private fun Expression.castTo(type: AnyType, forceDoubleCast: Boolean? = null): Expression =
+        castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
 }

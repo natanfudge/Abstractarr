@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 buildscript {
     dependencies {
@@ -9,13 +8,22 @@ plugins {
     id("org.jetbrains.kotlin.jvm") version "1.3.72"
 }
 
+def resultTestSet = sourceSets.create("resultTest")
+//def mcJarWithInterfacesSet = sourceSets.create("testOriginalJarWithInterfaces")
+
 apply plugin: MetaUtils
 
+def mcJarWithInterfaces
 metaUtils {
     def mcJar = createJarTest("testOriginalJar")
-    def interfaceStubs = createJarTest("interfaceStubs")
-    mcJar.compileClasspath += interfaceStubs.output
     sourceSets.test.runtimeClasspath += mcJar.output
+
+    mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
+//    resultTestSet.compileClasspath += mcJarWithInterfacesSet.output
+//    resultTestSet.runtimeClasspath += mcJarWithInterfacesSet.output
+    tasks.attachInterfaces.dependsOn("testOriginalJarClasses")
+    tasks.compileResultTestKotlin.dependsOn(tasks.attachInterfaces)
+
 }
 tasks.compileTestOriginalJarJava.options.compilerArgs += "-parameters"
 
@@ -24,20 +32,14 @@ configurations {
     resultTestRuntime.extendsFrom testRuntime
 }
 
-sourceSets {
-    resultTest {
-        compileClasspath += sourceSets.testOriginalJar.output
-        runtimeClasspath += sourceSets.testOriginalJar.output
-    }
-}
+
 
 
 task resultTest(type: Test) {
     group 'Verification'
     description 'Runs the resultTest tests.'
-    testClassesDirs = sourceSets.resultTest.output.classesDirs
-//    testClassesDirs =
-    classpath = sourceSets.resultTest.runtimeClasspath
+    testClassesDirs = resultTestSet.output.classesDirs
+    classpath = resultTestSet.runtimeClasspath
 
     useJUnitPlatform()
 
@@ -57,6 +59,7 @@ repositories {
 }
 
 dependencies {
+
     implementation("org.ow2.asm:asm:8.0.1")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation 'org.ow2.asm:asm-tree:8.0.1'
@@ -67,11 +70,11 @@ dependencies {
     resultTestImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.3.72'
     resultTestRuntime('org.junit.jupiter:junit-jupiter-engine:5.4.2')
 
-//    def testResultJar = files("")
     resultTestImplementation(files("build/resources/test/abstractedSrcCompiled.jar"))
+    resultTestRuntime(mcJarWithInterfaces)
 }
 
-tasks.withType(KotlinCompile) {
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
     kotlinOptions.jvmTarget = "1.8"
 
 }

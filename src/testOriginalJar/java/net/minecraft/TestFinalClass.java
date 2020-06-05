@@ -1,8 +1,7 @@
 package net.minecraft;
 
-import v1.net.minecraft.ITestFinalClass;
 
-public final class TestFinalClass extends TestSuperClass implements ITestFinalClass {
+public final class TestFinalClass extends TestSuperClass  {
     public TestOtherClass publicField;
     public final int publicFinalField = 2;
     public static String publicStaticField;

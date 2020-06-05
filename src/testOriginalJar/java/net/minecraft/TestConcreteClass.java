@@ -1,8 +1,7 @@
 package net.minecraft;
 
-import v1.net.minecraft.ITestConcreteClass;
 
-public class TestConcreteClass  extends TestSuperClass implements ITestConcreteClass {
+public class TestConcreteClass  extends TestSuperClass {
     private int privateField;
     int packageField;
     protected int protectedField;
@@ -49,7 +48,7 @@ public class TestConcreteClass  extends TestSuperClass implements ITestConcreteC
         super(arg2);
     }
 
-    public static class TestStaticInnerClass implements ITestConcreteClass.TestStaticInnerClass{
+    public static class TestStaticInnerClass {
         public static String publicStaticField;
         public static final TestOtherClass publicStaticOtherClassField = new TestOtherClass();
 
@@ -84,7 +83,7 @@ public class TestConcreteClass  extends TestSuperClass implements ITestConcreteC
 
     }
 
-    public class TestInnerClass implements ITestConcreteClass.TestInnerClass {
+    public class TestInnerClass  {
         public TestInnerClass(int arg1, TestOtherClass arg2) {
 
         }
