@@ -2,53 +2,116 @@ import asm.readToClassNode
 import descriptor.JavaLangObject
 import descriptor.MethodDescriptor
 import org.objectweb.asm.tree.ClassNode
+import java.lang.reflect.Method
 import java.nio.file.Path
 
 data class MethodEntry(val name: String, val descriptor: String)
 
-data class ClassEntry(val methods: Set<MethodEntry>, val superClass: String?, val superInterfaces: List<String>)
+data class ClassEntry(val methods: Set<MethodEntry>, val superClass: QualifiedName?, val superInterfaces: List<QualifiedName>)
 
-private val ClassEntry.directSuperTypes: List<String> get() = if(superClass != null) superInterfaces + superClass else superInterfaces
+private val ClassEntry.directSuperTypes: List<QualifiedName>
+    get() = if (superClass != null) superInterfaces + superClass else superInterfaces
 
 /**
  * class names use slash/separated/format
  */
-data class ClasspathIndex(private val classes: Map<String, ClassEntry>) {
-    private fun verifyClassName(name: String) {
+data class ClasspathIndex(private val classes: Map<QualifiedName, ClassEntry>) {
+    private val jdkClassesCache = mutableMapOf<QualifiedName, ClassEntry>()
+
+    private fun verifyClassName(name: QualifiedName) {
         require(classes.containsKey(name)) {
             "Attempt to find class not in the specified classpath: $name"
         }
     }
 
-    fun classHasMethod(className: String, methodName: String, methodDescriptor: MethodDescriptor): Boolean {
+    private fun QualifiedName.isJavaClass(): Boolean = packageName?.startsWith("java") == true
+
+    private fun getClassEntry(className: QualifiedName): ClassEntry = if (className.isJavaClass()) {
+        jdkClassesCache.computeIfAbsent(className) {
+            val clazz = Class.forName(className.toDotQualifiedString())
+            ClassEntry(
+                methods = clazz.methods.map { MethodEntry(it.name, getMethodDescriptor(it)) }.toSet(),
+                superInterfaces = clazz.interfaces.map { it.name.toQualifiedName(dotQualified = true) },
+                superClass = clazz.superclass?.name?.toQualifiedName(dotQualified = true)
+            )
+        }
+    } else {
         verifyClassName(className)
-        return classes.getValue(className).methods.contains(MethodEntry(methodName, methodDescriptor.classFileName))
+        classes.getValue(className)
     }
 
-    fun getSuperTypesRecursively(className: String) : Set<String> {
+
+    fun classHasMethod(className: QualifiedName, methodName: String, methodDescriptor: MethodDescriptor): Boolean {
+        return getClassEntry(className).methods.contains(MethodEntry(methodName, methodDescriptor.classFileName))
+    }
+
+    fun getSuperTypesRecursively(className: QualifiedName): Set<QualifiedName> {
         return (getSuperTypesRecursivelyImpl(className) + JavaLangObject).toSet()
     }
 
-    private fun getSuperTypesRecursivelyImpl(className: String): List<String> {
-        verifyClassName(className)
-        val directSupers = classes.getValue(className).directSuperTypes
-        return (directSupers + directSupers.filter { it != JavaLangObject }.flatMap { getSuperTypesRecursivelyImpl(it) })
+    private fun getSuperTypesRecursivelyImpl(className: QualifiedName): List<QualifiedName> {
+        val directSupers = getClassEntry(className).directSuperTypes
+        return (directSupers + directSupers.filter { it != JavaLangObject }
+            .flatMap { getSuperTypesRecursivelyImpl(it) })
+    }
+
+    private fun getDescriptorForClass(c: Class<*>): String {
+        if (c.isPrimitive) {
+            return when (c.name) {
+                "byte" -> "B"
+                "char" -> "C"
+                "double" -> "D"
+                "float" -> "F"
+                "int" -> "I"
+                "long" -> "J"
+                "short" -> "S"
+                "boolean" -> "Z"
+                "void" -> "V"
+                else -> error("Unrecognized primitive $c")
+            }
+        }
+        if (c.isArray) return c.name.replace('.', '/');
+        return ('L' + c.name + ';').replace('.', '/');
+    }
+
+    private fun getMethodDescriptor(m: Method): String {
+        val s = buildString {
+            append('(')
+            for (c in m.parameterTypes) {
+                append(getDescriptorForClass(c));
+            }
+            append(')')
+        }
+        return s + getDescriptorForClass(m.returnType);
     }
 }
+
+//fun MethodDescriptor.canOverride(superMethod : MethodDescriptor, index: ClasspathIndex){
+//    return this.parameterDescriptors == superMethod.parameterDescriptors
+//            && this.returnDescriptor
+//
+//}
+
+//private fun ReturnDescriptor.isEqualOrSubclassOf(superClass : )
+
 
 
 @OptIn(ExperimentalStdlibApi::class)
 fun indexClasspath(classPath: List<Path>): ClasspathIndex {
     val map = classPath.flatMap { path ->
         getClasses(path).map { classNode ->
-            classNode.name to ClassEntry(
+            classNode.name.toQualifiedName(dotQualified = false) to ClassEntry(
                 methods = classNode.methods.map { MethodEntry(it.name, it.desc) }.toHashSet(),
-                superClass = classNode.superName, superInterfaces = classNode.interfaces
+                superClass = classNode.superName.toQualifiedName(dotQualified = false),
+                superInterfaces = classNode.interfaces.map { it.toQualifiedName(dotQualified = false) }
             )
         }
     }.toMap()
+//    print(fib(40))
     return ClasspathIndex(map)
 }
+
+//private fun fib(n : Int): Int = if(n == 0 || n == 1) 1 else fib(n - 1) + fib(n - 2)
 
 private fun getClasses(path: Path): List<ClassNode> = when {
     !path.exists() -> listOf()

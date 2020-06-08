@@ -7,6 +7,8 @@ public class TestConcreteClass  extends TestSuperClass {
     protected int protectedField;
     public int publicField;
     public final int publicFinalField = 2;
+    public boolean someBool;
+    public boolean isSomeOtherBool;
     public TestOtherClass otherClassField = new TestOtherClass();
     private static String privateStaticField;
     public static String publicStaticField;

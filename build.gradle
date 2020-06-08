@@ -19,6 +19,8 @@ metaUtils {
     def apiRuntime = createJarTest("apiRuntime")
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
+//    resultTestSet.compileClasspath += apiRuntime.output
+//    resultTestSet.runtimeClasspath += apiRuntime.output
     sourceSets.test.runtimeClasspath += mcJar.output
 
     mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
@@ -93,6 +95,9 @@ test {
 
     maxHeapSize = '1G'
 }
+//
+//compileJava.options.fork = true
+//compileJava.options.forkOptions.executable = /path_to_javac
 
 //
 //test {

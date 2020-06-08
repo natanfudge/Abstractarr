@@ -1,6 +1,6 @@
 package net.minecraft;
 
-public class TestInnerExtender extends TestConcreteClass.TestStaticInnerClass{
+public class TestInnerExtender extends TestConcreteClass.TestStaticInnerClass {
     public TestInnerExtender(int arg1, TestOtherClass arg2) {
         super(arg1, arg2);
     }
