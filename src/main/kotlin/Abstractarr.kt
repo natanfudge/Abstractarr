@@ -3,7 +3,7 @@ import codegeneration.*
 import descriptor.*
 import java.nio.file.Path
 
-data class AbstractionMetadata(val versionPackage: String)
+data class AbstractionMetadata(val versionPackage: String, val classPath: List<Path>)
 
 //TODO:
 // deal with mc classes that extend non minecraft classes
@@ -15,6 +15,7 @@ data class AbstractionMetadata(val versionPackage: String)
 // annotations (nullable etc)
 // arrays
 // generics
+// wildcards
 // think about what happens when there is anon classes or lambdas
 
 
@@ -25,20 +26,27 @@ object Abstractor {
 
         destDir.deleteRecursively()
         destDir.createDirectory()
-//        destDir.createJar()
 
-//        destDir.openJar { destFs ->
+        val index = indexClasspath(metadata.classPath + listOf(mcJar) + getJvmBootClasses())
+
         for (classApi in ClassApi.readFromJar(mcJar)) {
             if (!classApi.isPublicApi) continue
 //                val destPath = destFs.getPath(/*classApi.fullyQualifiedName.replace(".", "/")*/ "/")
-            ClassAbstractor(metadata, classApi).abstractClass(destDir, outerClass = null)
+            ClassAbstractor(metadata, index, classApi).abstractClass(destDir, outerClass = null)
         }
 //        }
     }
 }
 
+private val SuperTyped = ObjectType("febb/apiruntime/SuperTyped")
 
-private class ClassAbstractor(private val metadata: AbstractionMetadata, private val classApi: ClassApi) {
+private fun <T> List<T>.appendIfNotNull(value: T?) = if (value == null) this else this + value
+
+private class ClassAbstractor(
+    private val metadata: AbstractionMetadata,
+    private val index: ClasspathIndex,
+    private val classApi: ClassApi
+) {
 
     /**
      * destPath == null and outerClass != null when it's an inner class
@@ -52,9 +60,13 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
         val isAbstract = false
         val isInterface = true
 
-        val superInterfaces = (classApi.superClass?.let { classApi.superInterfaces + it } ?: classApi.superInterfaces)
-//            .filter { it.isMcClass() }
-            .map { it.remapToApiClass() }
+        val superTypedInterface = classApi.superClass?.let {
+            SuperType(
+                rawType = SuperTyped, annotations = listOf(),
+                typeArguments = listOf(it)
+            )
+        }
+        val superInterfaces = classApi.superInterfaces.map { it.remapToApiClass() }.appendIfNotNull(superTypedInterface)
 
         if (destPath != null) {
             JavaCodeGenerator.writeClass(
@@ -75,13 +87,13 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
     private fun String?.toApiPackageName() = "${metadata.versionPackage}.${this ?: ""}"
     private fun String.toApiClassName() = "I$this"
 
+    private fun String.toApiClass() = if (isMcClass()) {
+        val (packageName, className) = splitFullyQualifiedName(dotQualified = false)
+        "${packageName.toApiPackageName()}.${className.toApiClassName()}".replace(".", "/")
+    } else this
 
-    private fun <T : Descriptor> T.remapToApiClass(): T = remap {
-        if (it.isMcClass()) {
-            val (packageName, className) = it.splitFullyQualifiedName(dotQualified = false)
-            "${packageName.toApiPackageName()}.${className.toApiClassName()}".replace(".", "/")
-        } else it
-    }
+    private fun <T : GenericJavaType> T.remapToApiClass(): T = remap { it.toApiClass() }
+    private fun <T : Descriptor> T.remapToApiClass(): T = remap { it.toApiClass() }
 
     private fun JavaGeneratedClass.addClassBody() {
         val mcClassType = classApi.nameAsType()
@@ -104,7 +116,7 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
 
         for (innerClass in classApi.innerClasses) {
             if (!innerClass.isPublic) continue
-            ClassAbstractor(metadata, innerClass).abstractClass(destPath = null, outerClass = this)
+            ClassAbstractor(metadata, index, innerClass).abstractClass(destPath = null, outerClass = this)
 
             // Inner classes are constructed by their parent
             if (!innerClass.isStatic) {
@@ -205,6 +217,7 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
         )
     }
 
+
     private fun JavaGeneratedClass.abstractMethod(
         method: ClassApi.Method,
         mcClassType: ObjectType
@@ -215,6 +228,9 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
         if (method.isConstructor && (classApi.isInterface || classApi.isAbstract)) return
         // Inner classes need to be constructed by their parent class
         if (classApi.isInnerClass && method.isConstructor && !classApi.isStatic) return
+
+        // Don't duplicate methods that are just being overriden
+        if (method.isOverride()) return
 
         val parameters = apiParametersDeclaration(method)
 
@@ -246,7 +262,7 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
 
             addStatement(
                 if (!method.isVoid || method.isConstructor) {
-                    check(returnType is AnyType) // because it's not void
+                    check(returnType is JvmType) // because it's not void
                     val returnedValue = call.castFromApiClass(returnType)
                     Statement.Return(returnedValue)
                 } else call
@@ -254,7 +270,12 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
         }
     }
 
-    //TODO: this will forcecast everything... Need to check how bad is runtime overhead and if we can check
+    //TODO: this won't work when the overriding method uses parameters or return types which are subclasses of those in the parent method.
+    // (for example: parent accepts List, overriding child accepts ArrayList)
+    private fun ClassApi.Method.isOverride() =
+        index.getSuperTypesRecursively(classApi.fullInnerName().replace('.', '/'))
+            .any { index.classHasMethod(it, name, descriptor) }
+
     // the finalness of parameters individually
     private fun apiPassedParameters(method: ClassApi.Method): List<Expression> =
         method.parameters.map { (name, type) -> Expression.Variable(name).castFromMcClass(type, doubleCast = true) }
@@ -265,15 +286,15 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
      * Casting from Super[] to Child[] will always fail.
      */
 
-    private fun Expression.castFromMcToApiClass(type: AnyType, doubleCast: Boolean? = null): Expression =
+    private fun Expression.castFromMcToApiClass(type: JvmType, doubleCast: Boolean? = null): Expression =
         if (type.isMcClass()) this.castTo(type.remapToApiClass(), doubleCast) else this
 
 
-    private fun Expression.castFromMcClass(type: AnyType, doubleCast: Boolean? = null): Expression =
+    private fun Expression.castFromMcClass(type: JvmType, doubleCast: Boolean? = null): Expression =
         if (type.isMcClass()) castTo(type, doubleCast) else this
 
 
-    private fun Expression.castFromApiClass(type: AnyType): Expression =
+    private fun Expression.castFromApiClass(type: JvmType): Expression =
         if (type.isApiClass()) this.castTo(type) else this
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
@@ -290,6 +311,6 @@ private class ClassAbstractor(private val metadata: AbstractionMetadata, private
 
     private fun doubleCastRequired(classApi: ClassApi) = classApi.isFinal
 
-    private fun Expression.castTo(type: AnyType, forceDoubleCast: Boolean? = null): Expression =
+    private fun Expression.castTo(type: JvmType, forceDoubleCast: Boolean? = null): Expression =
         castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
 }

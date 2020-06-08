@@ -12,4 +12,6 @@ public class TestSuperClass {
     public int inheritedMethod(){
         return 2;
     }
+
+    public int overridenMethod(){return 3;}
 }

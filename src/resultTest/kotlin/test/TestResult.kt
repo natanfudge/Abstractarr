@@ -1,5 +1,6 @@
 package test
 
+import net.minecraft.TestInterface
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.ITestConcreteClass
 import v1.net.minecraft.ITestOtherClass
@@ -8,6 +9,10 @@ import kotlin.test.assertEquals
 class TestResult {
     @Test
     fun testConcreteClass() {
+        val x : TestInterface = null!!
+
+
+
         assert(ITestConcreteClass.publicStaticOtherClassField is ITestOtherClass)
         assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
         assertEquals(ITestConcreteClass.publicStatic(), 4)
@@ -55,5 +60,7 @@ class TestResult {
         }
 
     }
+
+//    fun testAbstractImpl()
 
 }

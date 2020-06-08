@@ -1,7 +1,7 @@
 package net.minecraft;
 
 
-public class TestOtherClass {
+public class TestOtherClass  {
     public void oneCastTest(TestConcreteClass x) {
         ((TestInterface)x).bar();
     }

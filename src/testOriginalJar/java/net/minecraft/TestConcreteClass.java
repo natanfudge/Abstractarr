@@ -48,7 +48,7 @@ public class TestConcreteClass  extends TestSuperClass {
         super(arg2);
     }
 
-    public static class TestStaticInnerClass {
+    public static class TestStaticInnerClass extends TestSuperClass {
         public static String publicStaticField;
         public static final TestOtherClass publicStaticOtherClassField = new TestOtherClass();
 
@@ -60,7 +60,7 @@ public class TestConcreteClass  extends TestSuperClass {
         }
 
         public TestStaticInnerClass(int arg1, TestOtherClass arg2) {
-
+            super(arg2);
         }
 
         public int publicField;

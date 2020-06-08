@@ -8,12 +8,20 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
+//    private fun buildClasspathFromString(classpath : String) : List<Path>{
+//       return classpath.split(';').map {
+//           if(it)
+//       }
+//
+//    }
+
     @Test
     fun testAbstraction() {
 
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
-        Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = "v1"))
+//        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
+        Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = "v1", classPath = listOf()))
 
         val compiler = ToolProvider.getSystemJavaCompiler()
 
@@ -23,9 +31,10 @@ class TestAbstraction {
                 dest.recursiveChildren().filter { !it.isDirectory() }.map { it.toFile() }.toList()
             )
 
+            val runtime = getResource("apiRuntime.jar").toAbsolutePath().toString()
             compiler.getTask(
                 null, fileManager, diagnostics,
-                listOf("-classpath", System.getProperty("java.class.path")), null, compilationUnits
+                listOf("-classpath", System.getProperty("java.class.path") + ";" + runtime), null, compilationUnits
             ).call()
         }
 
