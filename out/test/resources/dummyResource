@@ -1,2 +1,0 @@
-This is here just because the java resources system gives nulls when it can't find resources, so we have one reliable
-resource that always exists.
