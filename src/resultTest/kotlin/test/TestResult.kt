@@ -1,11 +1,12 @@
 package test
 
-import net.minecraft.TestConcreteClass
+import febb.apiruntime.SuperTyped
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
-import kotlin.test.assertEquals
 
 class TestResult {
+    private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
+
     @Test
     fun testAbstractImpl() {
         with(ITestAbstractImpl.create(0, null)) {
@@ -124,41 +125,19 @@ class TestResult {
 
     @Test
     fun testNormalClassExtender() {
-//        println(ITestNormalClassExtender.create() is SuperTyped<*>)
-//        val x : SuperTyped<ArrayList<*>> = ITestNormalClassExtender.create()
-//        with(ITestNormalClassExtender.create()) {
-//            this.asSuper()
-//        }
+        with(ITestNormalClassExtender.create() as SuperTyped<ArrayList<String>>) {
+            with(asSuper()) {
+                add("foo")
+                assertEquals(size, 1)
+                assertEquals(first(), "foo")
+                remove("foo")
+                assert(isEmpty())
+            }
+
+            assertEquals(ITestNormalClassExtender::class.java.getDeclaredMethod("foo").invoke(this), "123")
+
+        }
     }
-//    public class TestNormalClassExtender extends ArrayList<String> {
-//    public String foo() {
-//        return "123";
-//    }
-//
-//    @Override
-//    public boolean isEmpty() {
-//        return super.isEmpty();
-//    }
-//
-//    @Override
-//    public boolean containsAll(Collection<?> c) {
-//        return super.containsAll(c);
-//    }
-//
-//    @Override
-//    public Stream<String> stream() {
-//        return null;
-//    }
-//
-//    @Override
-//    public String toString() {
-//        return super.toString();
-//    }
-//
-//    @Override
-//    protected void finalize() throws Throwable {
-//        super.finalize();
-//    }
-//}
+
 
 }

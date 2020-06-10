@@ -1,6 +1,10 @@
 import api.*
 import codegeneration.*
 import descriptor.*
+import signature.ClassGenericType
+import signature.GenericTypeOrPrimitive
+import signature.SimpleClassGenericType
+import signature.TypeArgument
 import java.nio.file.Path
 
 data class AbstractionMetadata(val versionPackage: String, val classPath: List<Path>)
@@ -37,7 +41,10 @@ object Abstractor {
     }
 }
 
-private val SuperTyped = ObjectType("febb/apiruntime/SuperTyped", dotQualified = false)
+//private fun superTyped()
+//private val SuperTypedClass = ObjectType("febb/apiruntime/SuperTyped", dotQualified = false)
+private val SuperTypedPackage = PackageName(listOf("febb", "apiruntime"))
+private const val SuperTypedName = "SuperTyped"
 
 private fun <T> List<T>.appendIfNotNull(value: T?) = if (value == null) this else this + value
 
@@ -54,16 +61,16 @@ private class ClassAbstractor(
         check(classApi.visibility == ClassVisibility.Public)
 
         // No need to add I for inner classes
-        //TODO: this is probably fucked now
         val className = if (outerClass == null) classApi.name.toApiClass() else classApi.name
         val visibility = classApi.visibility
         val isAbstract = false
         val isInterface = true
 
         val superTypedInterface = classApi.superClass?.let {
-            if (it.rawType.isMcClass()) it.remapToApiClass() else SuperType(
-                rawType = SuperTyped, annotations = listOf(),
-                typeArguments = listOf(it)
+            if (it.isMcClass()) it.remapToApiClass() else SuperType(
+                type = ClassGenericType(SuperTypedPackage,
+                    listOf(SimpleClassGenericType(SuperTypedName, listOf(TypeArgument.SpecificType(it.type, wildcardType = null))))),
+                annotations = listOf()
             )
         }
         val superInterfaces = classApi.superInterfaces.map { it.remapToApiClass() }.appendIfNotNull(superTypedInterface)
@@ -92,7 +99,7 @@ private class ClassAbstractor(
         QualifiedName(packageName = packageName.toApiPackageName(), shortName = shortName.toApiShortClassName())
     } else this
 
-    private fun <T : GenericJavaType> T.remapToApiClass(): T = remap { it.toApiClass() }
+    private fun <T : GenericTypeOrPrimitive> JavaType<T>.remapToApiClass(): JavaType<T> = remap { it.toApiClass() }
     private fun <T : Descriptor> T.remapToApiClass(): T = remap { it.toApiClass() }
 
     private fun JavaGeneratedClass.addClassBody() {
@@ -296,14 +303,16 @@ private class ClassAbstractor(
         method.getParameters().mapValues { (_, v) -> v.remapToApiClass() }.toMap()
 
 
-    private fun QualifiedName.isMcClass(): Boolean = packageStartsWith("net", "minecraft")
+    private fun QualifiedName.isMcClass(): Boolean = packageName.isMcClass()
+    private fun PackageName?.isMcClass(): Boolean = this?.startsWith("net", "minecraft") == true
     private fun Descriptor.isMcClass(): Boolean = this is ObjectType && fullClassName.isMcClass()
+    private fun JavaType<*>.isMcClass(): Boolean = type.let { it is ClassGenericType && it.packageName.isMcClass() }
     private fun QualifiedName.isApiClass(): Boolean = packageStartsWith(metadata.versionPackage, "net", "minecraft")
 
     private fun Descriptor.isApiClass(): Boolean =
         this is ObjectType && fullClassName.isApiClass()
 
-    private fun doubleCastRequired(classApi: ClassApi) = classApi.isFinal
+    private fun doubleCastRequired(classApi: ClassApi) = true /*classApi.isFinal*/ // the rules seem too ambiguous
 
     private fun Expression.castTo(type: JvmType, forceDoubleCast: Boolean? = null): Expression =
         castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))

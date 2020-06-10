@@ -19,8 +19,9 @@ metaUtils {
     def apiRuntime = createJarTest("apiRuntime")
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
-//    resultTestSet.compileClasspath += apiRuntime.output
-//    resultTestSet.runtimeClasspath += apiRuntime.output
+    apiRuntime.compileClasspath += mcJar.output
+//    mcJar.compileClasspath += apiRuntime.output
+//    mcJar.runtimeClasspath += apiRuntime.output
     sourceSets.test.runtimeClasspath += mcJar.output
 
     mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
@@ -76,8 +77,8 @@ dependencies {
     resultTestRuntime('org.junit.jupiter:junit-jupiter-engine:5.4.2')
 
     resultTestImplementation(files("build/resources/test/abstractedSrcCompiled.jar"))
-//    resultTestRuntime(mcJarWithInterfaces)
-    resultTestImplementation(mcJarWithInterfaces)
+    resultTestRuntime(mcJarWithInterfaces)
+//    resultTestImplementation(mcJarWithInterfaces)
 }
 //afterEvaluate {
 //    project.getConfigurations().getByName("compileClasspath").getFiles().each {println it }
