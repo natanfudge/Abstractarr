@@ -10,7 +10,7 @@ public class TestOverrideReturnTypeChange extends TestOverrideReturnTypeChangeSu
     }
 
     @Override
-    public ArrayList<String> bar() {
+    public ArrayList<TestOtherClass> bar() {
         return null;
     }
 

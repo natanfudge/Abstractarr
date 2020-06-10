@@ -1,5 +1,5 @@
 import asm.readToClassNode
-import descriptor.JavaLangObject
+import descriptor.JavaLangObjectName
 import descriptor.MethodDescriptor
 import org.objectweb.asm.tree.ClassNode
 import java.lang.reflect.Method
@@ -46,12 +46,12 @@ data class ClasspathIndex(private val classes: Map<QualifiedName, ClassEntry>) {
     }
 
     fun getSuperTypesRecursively(className: QualifiedName): Set<QualifiedName> {
-        return (getSuperTypesRecursivelyImpl(className) + JavaLangObject).toSet()
+        return (getSuperTypesRecursivelyImpl(className) + JavaLangObjectName).toSet()
     }
 
     private fun getSuperTypesRecursivelyImpl(className: QualifiedName): List<QualifiedName> {
         val directSupers = getClassEntry(className).directSuperTypes
-        return (directSupers + directSupers.filter { it != JavaLangObject }
+        return (directSupers + directSupers.filter { it != JavaLangObjectName }
             .flatMap { getSuperTypesRecursivelyImpl(it) })
     }
 

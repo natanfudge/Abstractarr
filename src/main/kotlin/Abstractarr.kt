@@ -1,10 +1,9 @@
 import api.*
 import codegeneration.*
-import descriptor.*
-import signature.ClassGenericType
-import signature.GenericTypeOrPrimitive
-import signature.SimpleClassGenericType
-import signature.TypeArgument
+import descriptor.Descriptor
+import descriptor.PrimitiveType
+import descriptor.remap
+import signature.*
 import java.nio.file.Path
 
 data class AbstractionMetadata(val versionPackage: String, val classPath: List<Path>)
@@ -22,7 +21,7 @@ data class AbstractionMetadata(val versionPackage: String, val classPath: List<P
 // wildcards
 // think about what happens when there is anon classes or lambdas
 // @NoNull on all .create() functions
-
+// throws
 
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
@@ -66,10 +65,18 @@ private class ClassAbstractor(
         val isAbstract = false
         val isInterface = true
 
+        // Add SuperTyped<SuperClass> superinterface for classes which have a non-mc superclass
         val superTypedInterface = classApi.superClass?.let {
-            if (it.isMcClass()) it.remapToApiClass() else SuperType(
-                type = ClassGenericType(SuperTypedPackage,
-                    listOf(SimpleClassGenericType(SuperTypedName, listOf(TypeArgument.SpecificType(it.type, wildcardType = null))))),
+            if (it.containsMcClasses()) it.remapToApiClass() else JavaClassType(
+                type = ClassGenericType(
+                    SuperTypedPackage,
+                    listOf(
+                        SimpleClassGenericType(
+                            SuperTypedName,
+                            listOf(TypeArgument.SpecificType(it.type, wildcardType = null))
+                        )
+                    )
+                ),
                 annotations = listOf()
             )
         }
@@ -94,12 +101,11 @@ private class ClassAbstractor(
     private fun PackageName?.toApiPackageName() = metadata.versionPackage.prependToQualified(this ?: PackageName.Empty)
     private fun ShortClassName.toApiShortClassName() = ShortClassName(("I" + outerClass()).prependTo(innerClasses()))
 
-    private fun QualifiedName.toApiClass(): QualifiedName = if (isMcClass()) {
-//        val (packageName, className) = toQualifiedName(dotQualified = false)
+    private fun QualifiedName.toApiClass(): QualifiedName = if (isMcClassName()) {
         QualifiedName(packageName = packageName.toApiPackageName(), shortName = shortName.toApiShortClassName())
     } else this
 
-    private fun <T : GenericTypeOrPrimitive> JavaType<T>.remapToApiClass(): JavaType<T> = remap { it.toApiClass() }
+    private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> = remap { it.toApiClass() }
     private fun <T : Descriptor> T.remapToApiClass(): T = remap { it.toApiClass() }
 
     private fun JavaGeneratedClass.addClassBody() {
@@ -142,12 +148,16 @@ private class ClassAbstractor(
                 abstract = false,
                 returnType = constructedInnerClass.remapToApiClass(),
                 parameters = apiParametersDeclaration(constructor)
+                    //no need for the this$0 outer class reference
+                    .toList().drop(1).toMap()
             ) {
                 addStatement(
                     Statement.Return(
                         Expression.Call.Constructor(
                             constructing = innerClass.innerMostClassNameAsType(),
-                            parameters = apiPassedParameters(constructor),
+                            parameters = apiPassedParameters(constructor)
+                                //no need for the this$0 outer class reference
+                                .drop(1),
                             receiver = Expression.This.castTo(classApi.nameAsType())
                         ).castFromMcToApiClass(constructedInnerClass, doubleCast = doubleCastRequired(innerClass))
                     )
@@ -159,17 +169,17 @@ private class ClassAbstractor(
     private fun JavaGeneratedClass.addConstant(field: ClassApi.Field) {
         addField(
             name = field.name, final = true, static = true, visibility = Visibility.Public,
-            type = field.descriptor.remapToApiClass(),
-            initializer = abstractedFieldExpression(field).castFromMcToApiClass(field.descriptor)
+            type = field.type.remapToApiClass(),
+            initializer = abstractedFieldExpression(field).castFromMcToApiClass(field.type)
         )
     }
 
     private fun JavaGeneratedClass.addSetter(field: ClassApi.Field) {
         addMethod(
             name = "set" + field.name.capitalize(),
-            parameters = mapOf(field.name to field.descriptor.remapToApiClass()),
+            parameters = mapOf(field.name to field.type.remapToApiClass()),
             visibility = Visibility.Public,
-            returnType = ReturnDescriptor.Void,
+            returnType = GenericReturnType.Void.noAnnotations(),
             abstract = false,
             static = field.isStatic,
             final = false
@@ -177,20 +187,23 @@ private class ClassAbstractor(
             addStatement(
                 Statement.Assignment(
                     target = abstractedFieldExpression(field),
-                    assignedValue = Expression.Variable(field.name).castFromMcClass(field.descriptor)
+                    assignedValue = Expression.Variable(field.name).castFromMcClass(field.type)
                 )
             )
         }
     }
 
     private fun JavaGeneratedClass.addGetter(field: ClassApi.Field) {
-        val getterName =
-            field.getGetterPrefix() + if (field.name.startsWith("is")) field.name else field.name.capitalize()
+        val getterName = field.getGetterPrefix() +
+                // When it starts with "is" no prefix is added so there's no need to capitalize
+                if (field.name.startsWith("is")) field.name else field.name.capitalize()
         addMethod(
-            name = if (classApi.methods.any { it.parameterNames.isEmpty() && it.name == getterName }) getterName + "_field" else getterName,
+            // Add _field when getter clashes with a method of the same name
+            name = if (classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }) getterName + "_field"
+            else getterName,
             parameters = mapOf(),
             visibility = Visibility.Public,
-            returnType = field.descriptor.remapToApiClass(),
+            returnType = field.type.remapToApiClass(),
             abstract = false,
             static = field.isStatic,
             final = false
@@ -199,15 +212,16 @@ private class ClassAbstractor(
 
             addStatement(
                 Statement.Return(
-                    fieldAccess.castFromMcToApiClass(field.descriptor)
+                    fieldAccess.castFromMcToApiClass(field.type)
                 )
             )
         }
     }
 
-    private fun ClassApi.Field.getGetterPrefix(): String = if (descriptor == PrimitiveType.Boolean) {
-        if (name.startsWith("is")) "" else "is"
-    } else "get"
+    private fun ClassApi.Field.getGetterPrefix(): String =
+        if (type.type.let { it is GenericsPrimitiveType && it.primitive == PrimitiveType.Boolean }) {
+            if (name.startsWith("is")) "" else "is"
+        } else "get"
 
 
     private fun abstractedFieldExpression(
@@ -234,7 +248,8 @@ private class ClassAbstractor(
 
         val parameters = apiParametersDeclaration(method)
 
-        val returnType = (if (method.isConstructor) classApi.nameAsType() else method.returnType).remapToApiClass()
+        val mcReturnType = if (method.isConstructor) classApi.nameAsType() else method.returnType
+        val returnType = mcReturnType.remapToApiClass()
 
         val mcClassType = classApi.nameAsType()
 
@@ -264,8 +279,9 @@ private class ClassAbstractor(
 
             addStatement(
                 if (!method.isVoid || method.isConstructor) {
-                    check(returnType is JvmType) // because it's not void
-                    val returnedValue = call.castFromApiClassTo(returnType)
+                    check(returnType.type is GenericTypeOrPrimitive) // because it's not void
+                    @Suppress("UNCHECKED_CAST")
+                    val returnedValue = call.castFromApiClassTo(returnType as JavaType<GenericTypeOrPrimitive>)
                     Statement.Return(returnedValue)
                 } else call
             )
@@ -275,11 +291,11 @@ private class ClassAbstractor(
 
     private fun ClassApi.Method.isOverride() = !isConstructor && !isStatic &&
             index.getSuperTypesRecursively(classApi.name)
-                .any { index.classHasMethod(it, name, descriptor) }
+                .any { index.classHasMethod(it, name, getJvmDescriptor()) }
 
     // the finalness of parameters individually
     private fun apiPassedParameters(method: ClassApi.Method): List<Expression> =
-        method.getParameters()
+        method.parameters
             .map { (name, type) -> Expression.Variable(name).castFromMcClass(type, doubleCast = true) }
 
     /**
@@ -288,32 +304,37 @@ private class ClassAbstractor(
      * Casting from Super[] to Child[] will always fail.
      */
 
-    private fun Expression.castFromMcToApiClass(type: JvmType, doubleCast: Boolean? = null): Expression =
-        if (type.isMcClass()) this.castTo(type.remapToApiClass(), doubleCast) else this
+    private fun Expression.castFromMcToApiClass(type: AnyJavaType, doubleCast: Boolean? = null): Expression =
+        if (type.containsMcClasses()) this.castTo(type.remapToApiClass(), doubleCast) else this
 
 
-    private fun Expression.castFromMcClass(type: JvmType, doubleCast: Boolean? = null): Expression =
-        if (type.isMcClass()) castTo(type, doubleCast) else this
+    private fun Expression.castFromMcClass(type: AnyJavaType, doubleCast: Boolean? = null): Expression =
+        if (type.containsMcClasses()) castTo(type, doubleCast) else this
 
 
-    private fun Expression.castFromApiClassTo(type: JvmType): Expression =
-        if (type.isApiClass()) this.castTo(type) else this
+    private fun Expression.castFromApiClassTo(type: AnyJavaType): Expression =
+        if (type.containsApiClasses()) this.castTo(type) else this
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
-        method.getParameters().mapValues { (_, v) -> v.remapToApiClass() }.toMap()
+        method.parameters.mapValues { (_, v) -> v.remapToApiClass() }.toMap()
 
 
-    private fun QualifiedName.isMcClass(): Boolean = packageName.isMcClass()
-    private fun PackageName?.isMcClass(): Boolean = this?.startsWith("net", "minecraft") == true
-    private fun Descriptor.isMcClass(): Boolean = this is ObjectType && fullClassName.isMcClass()
-    private fun JavaType<*>.isMcClass(): Boolean = type.let { it is ClassGenericType && it.packageName.isMcClass() }
-    private fun QualifiedName.isApiClass(): Boolean = packageStartsWith(metadata.versionPackage, "net", "minecraft")
+    private fun PackageName?.isMcPackage(): Boolean = this?.startsWith("net", "minecraft") == true
+    private fun QualifiedName.isMcClassName(): Boolean = packageName.isMcPackage()
+    private fun PackageName?.isApiClass(): Boolean =
+        this?.startsWith(metadata.versionPackage, "net", "minecraft") == true
 
-    private fun Descriptor.isApiClass(): Boolean =
-        this is ObjectType && fullClassName.isApiClass()
+//    private fun QualifiedName.isApiClass(): Boolean = packageName.isApiClass()
 
-    private fun doubleCastRequired(classApi: ClassApi) = true /*classApi.isFinal*/ // the rules seem too ambiguous
+    //    private fun Descriptor.isMcClass(): Boolean = this is ObjectType && fullClassName.isMcClass()
+    private fun JavaType<*>.containsMcClasses(): Boolean = type.getContainedClassesRecursively()
+        .any { it.packageName.isMcPackage() }
 
-    private fun Expression.castTo(type: JvmType, forceDoubleCast: Boolean? = null): Expression =
+    private fun AnyJavaType.containsApiClasses(): Boolean = type.getContainedClassesRecursively()
+        .any { it.packageName.isApiClass() }
+    private fun doubleCastRequired(@Suppress("UNUSED_PARAMETER") classApi: ClassApi)
+            = true /*classApi.isFinal*/ // the rules seem too ambiguous
+
+    private fun Expression.castTo(type: AnyJavaType, forceDoubleCast: Boolean? = null): Expression =
         castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
 }

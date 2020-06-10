@@ -9,7 +9,6 @@ plugins {
 }
 
 def resultTestSet = sourceSets.create("resultTest")
-//def mcJarWithInterfacesSet = sourceSets.create("testOriginalJarWithInterfaces")
 
 apply plugin: MetaUtils
 
@@ -20,13 +19,9 @@ metaUtils {
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
     apiRuntime.compileClasspath += mcJar.output
-//    mcJar.compileClasspath += apiRuntime.output
-//    mcJar.runtimeClasspath += apiRuntime.output
     sourceSets.test.runtimeClasspath += mcJar.output
 
     mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
-//    resultTestSet.compileClasspath += mcJarWithInterfacesSet.output
-//    resultTestSet.runtimeClasspath += mcJarWithInterfacesSet.output
     tasks.attachInterfaces.dependsOn("testOriginalJarClasses")
     tasks.compileResultTestKotlin.dependsOn(tasks.attachInterfaces)
 
@@ -38,9 +33,6 @@ configurations {
     resultTestRuntime.extendsFrom testRuntime
 }
 
-
-
-
 task resultTest(type: Test) {
     group 'Verification'
     description 'Runs the resultTest tests.'
@@ -50,10 +42,14 @@ task resultTest(type: Test) {
     useJUnitPlatform()
 
     maxHeapSize = '1G'
-
 }
 
-//tasks.each {println it}
+build.dependsOn(resultTest)
+
+//task testAll{
+//    dependsOn
+//}
+
 //tasks.compileResultTestKotlin.dependsOn(tasks.test)
 
 
@@ -78,11 +74,7 @@ dependencies {
 
     resultTestImplementation(files("build/resources/test/abstractedSrcCompiled.jar"))
     resultTestRuntime(mcJarWithInterfaces)
-//    resultTestImplementation(mcJarWithInterfaces)
 }
-//afterEvaluate {
-//    project.getConfigurations().getByName("compileClasspath").getFiles().each {println it }
-//}
 
 
 tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile) {
@@ -96,13 +88,4 @@ test {
 
     maxHeapSize = '1G'
 }
-//
-//compileJava.options.fork = true
-//compileJava.options.forkOptions.executable = /path_to_javac
 
-//
-//test {
-//    useJUnitPlatform()
-//
-//    maxHeapSize = '1G'
-//}

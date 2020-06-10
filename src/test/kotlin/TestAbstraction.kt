@@ -1,6 +1,7 @@
 import org.junit.jupiter.api.Test
 import testing.getResource
 import java.nio.file.Paths
+import javax.tools.Diagnostic
 import javax.tools.DiagnosticCollector
 import javax.tools.JavaFileObject
 import javax.tools.ToolProvider
@@ -54,7 +55,7 @@ class TestAbstraction {
         }
         compiledDestDir.zipToJar()
 
-        assert(diagnostics.diagnostics.isEmpty()) {
+        assert(diagnostics.diagnostics.filter { it.kind == Diagnostic.Kind.ERROR }.isEmpty()) {
             "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
         }
     }

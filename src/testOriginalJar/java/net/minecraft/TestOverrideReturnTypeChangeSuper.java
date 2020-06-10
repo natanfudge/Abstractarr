@@ -7,7 +7,7 @@ public class TestOverrideReturnTypeChangeSuper {
         return null;
     }
 
-    public List<String> bar() {
+    public List<TestOtherClass> bar() {
         return null;
     }
 

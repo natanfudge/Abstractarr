@@ -1,8 +1,9 @@
 package test
 
-import febb.apiruntime.SuperTyped
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
+import java.util.*
+import kotlin.collections.ArrayList
 
 class TestResult {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
@@ -20,7 +21,6 @@ class TestResult {
             assertEquals(compareTo(ITestAbstractImpl.create(0, null)), 0)
         }
     }
-
 
     @Test
     fun testClashingNames() {
@@ -124,20 +124,35 @@ class TestResult {
     }
 
     @Test
-    fun testNormalClassExtender() {
-        with(ITestNormalClassExtender.create() as SuperTyped<ArrayList<String>>) {
-            with(asSuper()) {
-                add("foo")
-                assertEquals(size, 1)
-                assertEquals(first(), "foo")
-                remove("foo")
-                assert(isEmpty())
-            }
-
-            assertEquals(ITestNormalClassExtender::class.java.getDeclaredMethod("foo").invoke(this), "123")
-
+    fun testOtherClass() {
+        with(ITestOtherClass.create()) {
+            oneCastTest(ITestConcreteClass.create(0, null))
+            twoCastTest(ITestConcreteClass.create(0, null))
+            realFinalCastTest(ITestFinalClass.create(ITestOtherClass.create()))
         }
     }
 
+    @Test
+    fun testOverrideReturnTypeChange() {
+        with(ITestOverrideReturnTypeChange.create()) {
+            val x: List<*>? = foo()
+            assertEquals(x, null)
+            val y: ArrayList<ITestOtherClass>? = bar()
+            assertEquals(y, null)
+            val z : ITestAbstractImpl? = mcClass()
+            assertEquals(z, null)
+        }
+    }
 
+    @Test
+    fun testOverrideReturnTypeChangeSuper(){
+        with(ITestOverrideReturnTypeChangeSuper.create()){
+            val x: Any? = foo()
+            assertEquals(x, null)
+            val y: List<ITestOtherClass>? = bar()
+            assertEquals(y, null)
+            val z : ITestAbstractClass? = mcClass()
+            assertEquals(z, null)
+        }
+    }
 }
