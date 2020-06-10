@@ -42,6 +42,7 @@ class TestAbstraction {
 
 
         val compiledDestDir = Paths.get("${dest}Compiled")
+        compiledDestDir.createDirectories()
         dest.recursiveChildren().forEach {
             if (it.hasExtension(".class")) {
                 val relativePath = dest.relativize(it)
@@ -53,7 +54,7 @@ class TestAbstraction {
                 }
             }
         }
-        compiledDestDir.zipToJar()
+        compiledDestDir.convertDirToJar()
 
         assert(diagnostics.diagnostics.filter { it.kind == Diagnostic.Kind.ERROR }.isEmpty()) {
             "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
