@@ -18,15 +18,17 @@ metaUtils {
     def apiRuntime = createJarTest("apiRuntime")
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
-    apiRuntime.compileClasspath += mcJar.output
+//    apiRuntime.compileClasspath += mcJar.output
     sourceSets.test.runtimeClasspath += mcJar.output
 
     mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
     tasks.attachInterfaces.dependsOn("testOriginalJarClasses")
     tasks.compileResultTestKotlin.dependsOn(tasks.attachInterfaces)
+    tasks.test.dependsOn(tasks.attachInterfaces)
 
 }
 tasks.compileTestOriginalJarJava.options.compilerArgs += "-parameters"
+//tasks.test.dependsOn(mcJarWithInterfaces)
 
 configurations {
     resultTestCompile.extendsFrom testCompile
@@ -74,6 +76,7 @@ dependencies {
 
     resultTestImplementation(files("build/resources/test/abstractedSrcCompiled.jar"))
     resultTestRuntime(mcJarWithInterfaces)
+    apiRuntimeImplementation(mcJarWithInterfaces)
 }
 
 

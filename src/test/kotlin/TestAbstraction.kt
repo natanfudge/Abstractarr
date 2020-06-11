@@ -10,12 +10,6 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
-//    private fun buildClasspathFromString(classpath : String) : List<Path>{
-//       return classpath.split(';').map {
-//           if(it)
-//       }
-//
-//    }
 
     @Test
     fun testAbstraction() {
@@ -34,9 +28,10 @@ class TestAbstraction {
             )
 
             val runtime = getResource("apiRuntime.jar").toAbsolutePath().toString()
+            val mcJar = getResource("mcJarWithInterfaces.jar").toAbsolutePath().toString()
             compiler.getTask(
                 null, fileManager, diagnostics,
-                listOf("-classpath", System.getProperty("java.class.path") + ";" + runtime), null, compilationUnits
+                listOf("-classpath", /*System.getProperty("java.class.path")*/ "$mcJar;$runtime"), null, compilationUnits
             ).call()
         }
 
@@ -56,7 +51,7 @@ class TestAbstraction {
         }
         compiledDestDir.convertDirToJar()
 
-        assert(diagnostics.diagnostics.filter { it.kind == Diagnostic.Kind.ERROR }.isEmpty()) {
+        assert(diagnostics.diagnostics.none { it.kind == Diagnostic.Kind.ERROR }) {
             "Compilation errors exist: \n" + diagnostics.diagnostics.joinToString("\n\n") + "\n"
         }
     }

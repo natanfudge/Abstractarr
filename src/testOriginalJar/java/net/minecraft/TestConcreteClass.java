@@ -1,7 +1,7 @@
 package net.minecraft;
 
 
-public class TestConcreteClass  extends TestSuperClass {
+public class TestConcreteClass extends TestSuperClass {
     private int privateField;
     int packageField;
     protected int protectedField;
@@ -44,10 +44,16 @@ public class TestConcreteClass  extends TestSuperClass {
         return 3;
     }
 
-    public TestStaticInnerClass innerClassMethod(){return new TestStaticInnerClass(23, new TestOtherClass());}
+    public TestStaticInnerClass innerClassMethod() {
+        return new TestStaticInnerClass(23, new TestOtherClass());
+    }
 
     public TestConcreteClass(int arg1, TestOtherClass arg2) {
         super(arg2);
+    }
+
+    public TestConcreteClass() {
+        this(0, null);
     }
 
     public static class TestStaticInnerClass extends TestSuperClass {
@@ -58,7 +64,8 @@ public class TestConcreteClass  extends TestSuperClass {
             return "SomeString";
         }
 
-        public static int publicStatic() { return 4;
+        public static int publicStatic() {
+            return 4;
         }
 
         public TestStaticInnerClass(int arg1, TestOtherClass arg2) {
@@ -85,7 +92,7 @@ public class TestConcreteClass  extends TestSuperClass {
 
     }
 
-    public class TestInnerClass  {
+    public class TestInnerClass {
         public TestInnerClass(int arg1, TestOtherClass arg2) {
 
         }
