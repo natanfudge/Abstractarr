@@ -28,8 +28,9 @@ metaUtils {
 
 }
 tasks.compileTestOriginalJarJava.options.compilerArgs += "-parameters"
-//tasks.test.dependsOn(mcJarWithInterfaces)
 
+//D:\a\Abstractarr\Abstractarr\build\resources\test\
+// D:\a\Abstractarr\Abstractarr\build\resources\test
 configurations {
     resultTestCompile.extendsFrom testCompile
     resultTestRuntime.extendsFrom testRuntime
@@ -48,11 +49,6 @@ task resultTest(type: Test) {
 
 build.dependsOn(resultTest)
 
-//task testAll{
-//    dependsOn
-//}
-
-//tasks.compileResultTestKotlin.dependsOn(tasks.test)
 
 
 group("io.github.febb")
