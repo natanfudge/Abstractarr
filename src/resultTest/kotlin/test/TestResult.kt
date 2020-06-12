@@ -8,6 +8,7 @@ class TestResult {
 
     @Test
     fun testAbstractImpl() {
+        println("Running testAbstractImpl test")
         with(ITestAbstractImpl.create(0, null)) {
             assert(abstractMethod() is ITestAbstractClass)
             assert(abstractMethodParam(ITestConcreteClass.create(0, null)) is ITestAbstractClass)
