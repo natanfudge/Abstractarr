@@ -16,6 +16,8 @@ def mcJarWithInterfaces
 metaUtils {
     def mcJar = createJarTest("testOriginalJar")
     def apiRuntime = createJarTest("apiRuntime")
+    mcJar.compileClasspath += apiRuntime.output
+//    mcJar.compileClasspath += apiRuntime.output
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
 //    apiRuntime.compileClasspath += mcJar.output

@@ -93,7 +93,7 @@ public class TestConcreteClass extends TestSuperClass {
     }
 
     public class TestInnerClass {
-        public TestInnerClass(int arg1, TestOtherClass arg2) {
+        public TestInnerClass(int arg1, TestOtherClass arg2)  throws RuntimeException {
 
         }
 

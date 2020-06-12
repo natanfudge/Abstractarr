@@ -1,6 +1,7 @@
 import api.*
 import codegeneration.*
 import descriptor.JvmPrimitiveType
+import descriptor.ObjectType
 import signature.*
 import util.*
 import java.nio.file.Path
@@ -9,13 +10,11 @@ data class AbstractionMetadata(val versionPackage: String, val classPath: List<P
 
 //TODO:
 // baseclasses
-// annotations (nullable etc)
-// test inner class constructors with throws, supposedly signatures don't include synthetic parameters
-// test anon classes or lambdas
-// @NoNull on all .create() functions
-// throws
-
-//TODO: deal with cases such as these:
+//TODO: list of wanted asm magic:
+// - Remove casts
+// - Final interfaces
+// - Add type bounds without them being checked (enums, other supertyped cases)
+// i.e.:
 //class McClass1<T extends JdkClass>
 //class MCClass2 extends JdkClass
 //class McClass3 extends McClass1<McClass2>
@@ -35,7 +34,7 @@ object Abstractor {
 
         val index = indexClasspath(metadata.classPath + listOf(mcJar) /*+ getJvmBootClasses()*/)
 
-        for (classApi in ClassApi.readFromJar(mcJar)/*.filter { it.name.shortName.startsWith("TestGenerics") }*/) {
+        for (classApi in ClassApi.readFromJar(mcJar)) {
             if (!classApi.isPublicApi) continue
             ClassAbstractor(metadata, index, classApi).abstractClass(destDir, outerClass = null)
         }
@@ -67,7 +66,8 @@ private class ClassAbstractor(
             shortName = shortName.innermostClass(),
             typeArguments = allApiClassTypeArguments(),
             superInterfaces = classApi.superInterfaces.remapToApiClasses().appendIfNotNull(superTypedInterface),
-            superClass = null
+            superClass = null,
+            annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
         ) { addClassBody() }
 
         if (destPath != null) {
@@ -142,8 +142,9 @@ private class ClassAbstractor(
 
         val parameters = apiParametersDeclaration(method)
 
-        val mcReturnType =
-            if (method.isConstructor) classApi.asType().pushAllTypeArgumentsToInnermostClass() else method.returnType
+        val mcReturnType = if (method.isConstructor) classApi.asType().pushAllTypeArgumentsToInnermostClass()
+            .copy(annotations = listOf(NotNullAnnotation))
+            else method.returnType
         val returnType = mcReturnType.remapToApiClass()
 
         val mcClassType = classApi.asRawType()
@@ -155,7 +156,8 @@ private class ClassAbstractor(
             static = method.isStatic || method.isConstructor,
             abstract = false,
             returnType = returnType,
-            typeArguments = if (method.isConstructor) allApiClassTypeArguments() else method.typeArguments.remapDeclToApiClasses()
+            typeArguments = if (method.isConstructor) allApiClassTypeArguments() else method.typeArguments.remapDeclToApiClasses(),
+            throws = method.throws.map { it.remapToApiClass() }
         ) {
             val passedParameters = apiPassedParameters(method)
             val call = if (method.isConstructor) {
@@ -219,7 +221,8 @@ private class ClassAbstractor(
             abstract = false,
             static = field.isStatic,
             final = false,
-            typeArguments = listOf()
+            typeArguments = listOf(),
+            throws = listOf()
         ) {
             val fieldAccess = abstractedFieldExpression(field)
 
@@ -245,7 +248,8 @@ private class ClassAbstractor(
             abstract = false,
             static = field.isStatic,
             final = false,
-            typeArguments = listOf()
+            typeArguments = listOf(),
+            throws = listOf()
         ) {
             addStatement(
                 Statement.Assignment(
@@ -275,11 +279,13 @@ private class ClassAbstractor(
                 static = false,
                 final = false,
                 abstract = false,
-                returnType = constructedInnerClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass(),
+                returnType = constructedInnerClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
+                    .copy(annotations = listOf(NotNullAnnotation)),
                 parameters = apiParametersDeclaration(constructor)
                     //no need for the this$0 outer class reference
                     .toList().drop(1).toMap(),
-                typeArguments = innerClass.typeArguments.remapDeclToApiClasses()
+                typeArguments = innerClass.typeArguments.remapDeclToApiClasses(),
+                throws = constructor.throws
             ) {
                 addStatement(
                     Statement.Return(
@@ -314,7 +320,8 @@ private class ClassAbstractor(
             abstract = false,
             final = false,
             static = true,
-            typeArguments = allApiClassTypeArguments()
+            typeArguments = allApiClassTypeArguments(),
+            throws = listOf()
         ) {
             addStatement(
                 Statement.Return(
@@ -413,3 +420,4 @@ private const val EnumName = "Enum"
 private const val BooleanGetterPrefix = "is"
 private const val ArrayFactoryName = "array"
 private const val ArrayFactorySizeParamName = "size"
+private val NotNullAnnotation = JavaAnnotation(ObjectType("org/jetbrains/annotations/NotNull", dotQualified = false))

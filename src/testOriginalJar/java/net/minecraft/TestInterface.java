@@ -1,6 +1,6 @@
 package net.minecraft;
 
-
+@FunctionalInterface
 public interface TestInterface  {
     TestInterface foo();
 
