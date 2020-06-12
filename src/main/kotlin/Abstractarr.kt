@@ -10,10 +10,8 @@ data class AbstractionMetadata(val versionPackage: String, val classPath: List<P
 //TODO:
 // baseclasses
 // annotations (nullable etc)
-// generics (use same generics in methods and fields and supertypes)
-// test inner class with throws, supposedly signatures don't include synthetic parameters
-// wildcards
-// think about what happens when there is anon classes or lambdas
+// test inner class constructors with throws, supposedly signatures don't include synthetic parameters
+// test anon classes or lambdas
 // @NoNull on all .create() functions
 // throws
 
