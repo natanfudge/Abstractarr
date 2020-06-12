@@ -30,9 +30,11 @@ class TestAbstraction {
 
             val runtime = getResource("apiRuntime.jar").toAbsolutePath().toString()
             val mcJar = getResource("mcJarWithInterfaces.jar").toAbsolutePath().toString()
+            val classpath = "$mcJar;$runtime"
+            println("Compiling with classpath = $classpath")
             compiler.getTask(
                 null, fileManager, diagnostics,
-                listOf("-classpath", /*System.getProperty("java.class.path")*/ "$mcJar;$runtime"), null, compilationUnits
+                listOf("-classpath", /*System.getProperty("java.class.path")*/classpath ), null, compilationUnits
             ).call()
         }
 
