@@ -1,5 +1,6 @@
 import org.junit.jupiter.api.Test
 import testing.getResource
+import util.*
 import java.nio.file.Paths
 import javax.tools.Diagnostic
 import javax.tools.DiagnosticCollector
