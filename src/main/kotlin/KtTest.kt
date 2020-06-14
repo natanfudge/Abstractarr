@@ -2,27 +2,27 @@ import kotlin.random.Random
 
 //import kotlin.random.Random
 //
-class Orig : IOrig {
-    lateinit var arrField: Array<Orig?>
+//class Orig : IOrig {
+//    lateinit var arrField: Array<Orig?>
+//
+//    private val id = Random.nextInt(0, 20)
+//    override fun toString(): String {
+//        return id.toString()
+//    }
+//}
+//
 
-    private val id = Random.nextInt(0, 20)
-    override fun toString(): String {
-        return id.toString()
-    }
-}
-
-
-interface IOrig {
-    fun setArrField(arrField: Array<IOrig?>) {
-        (this as Orig).arrField = arrField as Array<Orig?>
-    }
-
-    fun getArrField() : Array<IOrig?> = (this as Orig).arrField as Array<IOrig?>
-
-    companion object {
-        fun create() = Orig() as IOrig
-    }
-}
+//interface IOrig {
+//    fun setArrField(arrField: Array<IOrig?>) {
+//        (this as Orig).arrField = arrField as Array<Orig?>
+//    }
+//
+//    fun getArrField() : Array<IOrig?> = (this as Orig).arrField as Array<IOrig?>
+//
+//    companion object {
+//        fun create() = Orig() as IOrig
+//    }
+//}
 
 //fun array(size: Int): Array<IOrig?>? {
 //    return arrayOfNulls<Orig>(size)

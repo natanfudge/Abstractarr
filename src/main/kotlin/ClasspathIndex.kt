@@ -1,14 +1,21 @@
 import asm.readToClassNode
 import descriptor.JavaLangObjectName
 import descriptor.MethodDescriptor
+import descriptor.read
 import org.objectweb.asm.tree.ClassNode
 import util.*
 import java.lang.reflect.Method
 import java.nio.file.Path
 
-data class MethodEntry(val name: String, val descriptor: String)
+data class MethodEntry(val name: String, val descriptor: String) {
+    val descriptorParsed = lazy { MethodDescriptor.read(descriptor) }
+}
 
-data class ClassEntry(val methods: Set<MethodEntry>, val superClass: QualifiedName?, val superInterfaces: List<QualifiedName>)
+data class ClassEntry(
+    val methods: Set<MethodEntry>,
+    val superClass: QualifiedName?,
+    val superInterfaces: List<QualifiedName>
+)
 
 private val ClassEntry.directSuperTypes: List<QualifiedName>
     get() = if (superClass != null) superInterfaces + superClass else superInterfaces
@@ -44,6 +51,16 @@ data class ClasspathIndex(private val classes: Map<QualifiedName, ClassEntry>) {
 
     fun classHasMethod(className: QualifiedName, methodName: String, methodDescriptor: MethodDescriptor): Boolean {
         return getClassEntry(className).methods.contains(MethodEntry(methodName, methodDescriptor.classFileName))
+    }
+
+    fun classHasMethodIgnoringReturnType(
+        className: QualifiedName,
+        methodName: String,
+        methodDescriptor: MethodDescriptor
+    ): Boolean = getClassEntry(className).methods.any {
+        if (it.name != methodName) return@any false
+        val descriptor = it.descriptorParsed.value
+        descriptor.parameterDescriptors == methodDescriptor.parameterDescriptors
     }
 
     fun getSuperTypesRecursively(className: QualifiedName): Set<QualifiedName> {
@@ -94,7 +111,6 @@ data class ClasspathIndex(private val classes: Map<QualifiedName, ClassEntry>) {
 //}
 
 //private fun ReturnDescriptor.isEqualOrSubclassOf(superClass : )
-
 
 
 @OptIn(ExperimentalStdlibApi::class)

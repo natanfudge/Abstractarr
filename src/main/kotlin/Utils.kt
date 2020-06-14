@@ -1,13 +1,8 @@
 import api.*
-import codegeneration.Expression
-import codegeneration.castExpressionTo
 import signature.*
 import util.*
 
-internal fun PackageName?.isMcPackage(): Boolean = this?.startsWith("net", "minecraft") == true
-internal fun QualifiedName.isMcClassName(): Boolean = packageName.isMcPackage()
-internal fun JavaType<*>.isMcClass(): Boolean =
-    type.let { it is ClassGenericType && it.packageName.isMcPackage() }
+
 
 
 
@@ -21,6 +16,10 @@ internal fun doubleCastRequired(classApi: ClassApi) = true /*classApi.isFinal*/ 
 internal fun ClassApi.Method.isOverride(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
         index.getSuperTypesRecursively(owningClass.name)
             .any { index.classHasMethod(it, name, getJvmDescriptor()) }
+
+internal fun ClassApi.Method.isOverrideIgnoreReturnType(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
+        index.getSuperTypesRecursively(owningClass.name)
+            .any { index.classHasMethodIgnoringReturnType(it, name, getJvmDescriptor()) }
 
 // Since inner classes are converted to interfaces, they become static, so they must contain the type arguments of their outer classes
 // with them.

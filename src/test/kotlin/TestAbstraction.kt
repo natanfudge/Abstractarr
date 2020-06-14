@@ -1,3 +1,4 @@
+import abstractor.VersionPackage
 import org.junit.jupiter.api.Test
 import testing.getResource
 import util.*
@@ -18,7 +19,7 @@ class TestAbstraction {
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
 //        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
-        Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = "v1", classPath = listOf()))
+        Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = VersionPackage("v1"), classPath = listOf()))
 
         val compiler = ToolProvider.getSystemJavaCompiler()
 
@@ -29,8 +30,8 @@ class TestAbstraction {
             )
 
             val runtime = getResource("apiRuntime.jar").toAbsolutePath().toString()
-            val mcJar = Paths.get("testdata/mcJarWithInterfaces.jar").toAbsolutePath().toString() /*getResource("mcJarWithInterfaces.jar").toAbsolutePath().toString()*/
-            val classpath = "$mcJar;$runtime"
+            val mcJarWithInterfaces = Paths.get("testdata/mcJarWithInterfaces.jar").toAbsolutePath().toString()
+            val classpath = "$mcJarWithInterfaces;$runtime"
             println("Compiling with classpath = $classpath")
             compiler.getTask(
                 null, fileManager, diagnostics,
