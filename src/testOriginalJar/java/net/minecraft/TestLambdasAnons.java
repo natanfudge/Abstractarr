@@ -2,13 +2,13 @@ package net.minecraft;
 
 public class TestLambdasAnons {
     public static void foo() {
-        TestInterface x = new TestInterface() {
+        TestLambdaInterface x = new TestLambdaInterface() {
             @Override
-            public TestInterface foo() {
+            public TestLambdaInterface foo() {
                 return null;
             }
         };
 
-        TestInterface y = () -> null;
+        TestLambdaInterface y = () -> null;
     }
 }

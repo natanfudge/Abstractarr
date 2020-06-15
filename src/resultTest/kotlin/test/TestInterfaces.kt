@@ -3,7 +3,7 @@ package test
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
-class TestResult {
+class TestInterfaces {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
     @Test

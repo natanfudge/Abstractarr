@@ -22,6 +22,11 @@ public class TestAbstractImpl extends TestAbstractClass implements TestInterface
     }
 
     @Override
+    public TestOtherClass boz(TestOtherClass x) {
+        return null;
+    }
+
+    @Override
     public int compareTo(TestAbstractImpl o) {
         return 0;
     }
