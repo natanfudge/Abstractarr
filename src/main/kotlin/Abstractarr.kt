@@ -231,7 +231,9 @@ private data class ClassAbstractor(
                             Expression.Variable(name).castFromMcToApiClass(type, doubleCast = true, forceCast = true)
                         }
                         else passedParameters,
-                        name = method.name
+                        name = method.name,
+                        methodAccess = method.access,
+                        receiverAccess = classApi.access
                     )
                 }
 
