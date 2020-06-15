@@ -1,13 +1,20 @@
 import abstractor.VersionPackage
+import asm.readToClassNode
 import org.junit.jupiter.api.Test
+import org.objectweb.asm.util.ASMifier
+import org.objectweb.asm.util.TraceClassVisitor
 import testing.getResource
 import util.*
+import java.io.OutputStream
+import java.io.OutputStreamWriter
+import java.io.PrintWriter
+import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.Paths
 import javax.tools.Diagnostic
 import javax.tools.DiagnosticCollector
 import javax.tools.JavaFileObject
 import javax.tools.ToolProvider
-
 
 
 class TestAbstraction {
@@ -19,7 +26,12 @@ class TestAbstraction {
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
 //        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
-        Abstractor.abstract(mcJar, dest, metadata = AbstractionMetadata(versionPackage = VersionPackage("v1"), classPath = listOf()))
+        Abstractor.abstract(
+            mcJar, dest, metadata = AbstractionMetadata(
+                versionPackage = VersionPackage("v1"),
+                classPath = listOf(), includeImplementationDetails = true
+            )
+        )
 
         val compiler = ToolProvider.getSystemJavaCompiler()
 
@@ -35,24 +47,26 @@ class TestAbstraction {
             println("Compiling with classpath = $classpath")
             compiler.getTask(
                 null, fileManager, diagnostics,
-                listOf("-classpath", /*System.getProperty("java.class.path")*/classpath ), null, compilationUnits
+                listOf("-classpath", /*System.getProperty("java.class.path")*/classpath), null, compilationUnits
             ).call()
         }
 
 
         val compiledDestDir = Paths.get("${dest}Compiled")
         compiledDestDir.createDirectories()
-        dest.recursiveChildren().forEach {
-            if (it.hasExtension(".class")) {
+        dest.recursiveChildren()
+            .filter { it.isClassfile() }
+//            .take(1)
+            .forEach {
+                printAsmCode(it)
                 val relativePath = dest.relativize(it)
                 val target = compiledDestDir.resolve(relativePath.toString())
                 target.parent.createDirectories()
                 if (!it.isDirectory()) {
                     it.copyTo(target)
-                    it.delete()
+//                    it.delete()
                 }
             }
-        }
         compiledDestDir.convertDirToJar()
 
         assert(diagnostics.diagnostics.none { it.kind == Diagnostic.Kind.ERROR }) {
@@ -63,3 +77,12 @@ class TestAbstraction {
 
 }
 
+private fun printAsmCode(path: Path) {
+    val target = Paths.get(path.toString().removeSuffix(".class") + "_asm.java")
+//    println("Writing asm to $target")
+    Files.newOutputStream(target).use {
+        val visitor = TraceClassVisitor(null, ASMifier(), PrintWriter(it))
+        readToClassNode(path).accept(visitor)
+    }
+
+}

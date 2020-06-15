@@ -4,13 +4,17 @@ import abstractor.isMcPackage
 import api.*
 import codegeneration.*
 import descriptor.JvmPrimitiveType
+import descriptor.JvmType
 import descriptor.ObjectType
-import org.objectweb.asm.ClassWriter
 import signature.*
 import util.*
 import java.nio.file.Path
 
-data class AbstractionMetadata(val versionPackage: VersionPackage, val classPath: List<Path>)
+data class AbstractionMetadata(
+    val versionPackage: VersionPackage,
+    val classPath: List<Path>,
+    val includeImplementationDetails: Boolean
+)
 
 
 //TODO:
@@ -34,7 +38,6 @@ data class AbstractionMetadata(val versionPackage: VersionPackage, val classPath
 
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
-        val x = ClassWriter(1)
         require(destDir.parent.exists()) { "The chosen destination path '$destDir' is not in any existing directory." }
         require(destDir.parent.isDirectory()) { "The parent of the chosen destination path '$destDir' is not a directory." }
 
@@ -44,7 +47,7 @@ object Abstractor {
         val index = indexClasspath(metadata.classPath + listOf(mcJar) /*+ getJvmBootClasses()*/)
 
         for (classApi in ClassApi.readFromJar(mcJar)
-//            .filter { it.name.shortName.startsWith("TestAnnotations") }
+//            .filter { it.name.shortName.startsWith("TestGenerics") }
         ) {
             if (!classApi.isPublicApi) continue
             ClassAbstractor(metadata, index, classApi, baseClass = false).abstractClass(
@@ -102,8 +105,10 @@ private data class ClassAbstractor(
 
         val classInfo = ClassInfo(
             visibility = ClassVisibility.Public,
-            isAbstract = !isInterface,
-            isInterface = isInterface,
+            access = ClassAccess(
+                isFinal = false,
+                variant = if (isInterface) ClassVariant.Interface else ClassVariant.AbstractClass
+            ),
             shortName = shortName.innermostClass(),
             typeArguments = allApiClassTypeArguments(),
             superInterfaces = interfaces,
@@ -182,7 +187,8 @@ private data class ClassAbstractor(
             // TODO: there's no real way to overload methods that only differ in return type, at least in java
             if (/*method.returnType.castRequiredToMcClass() &&*/ method.parameters.values.none { it.castRequiredToMcClass() }) return
             // Abstract baseclass methods are abstract too, but since the api interface already declares the method there's no need to declare it again
-            if (baseClass && method.isAbstract) return
+            if (method.isAbstract) return
+            if (!metadata.includeImplementationDetails) return
         }
         // Abstract classes/interfaces can't be constructed directly
         if (method.isConstructor && (classApi.isInterface || (!baseClass && classApi.isAbstract))) return
@@ -194,7 +200,7 @@ private data class ClassAbstractor(
         // Don't duplicate methods that are just being overriden
         // In baseclasses generic types are just Object, so overriding with a superclass return type usually fails,
         // so we remove such overrides.
-        if (method.isOverrideIgnoreReturnType(index, classApi)) return
+        if (!baseClass && method.isOverrideIgnoreReturnType(index, classApi)) return
 //        }
         //TODO: test if baseclass and method with object return type is override
 
@@ -228,12 +234,15 @@ private data class ClassAbstractor(
                             else -> Expression.This.castTo(mcClassType)
                         },
                         parameters = if (baseClass) method.parameters.map { (name, type) ->
-                            Expression.Variable(name).castFromMcToApiClass(type, doubleCast = true, forceCast = true)
+                            type.toJvmType() to Expression.Variable(name)
+                                .castFromMcToApiClass(type, doubleCast = true, forceCast = true)
                         }
                         else passedParameters,
                         name = method.name,
                         methodAccess = method.access,
-                        receiverAccess = classApi.access
+                        receiverAccess = classApi.access,
+                        returnType = (if (baseClass) returnType else mcReturnType).toJvmType(),
+                        owner = (if (baseClass) mcClassType.remapToApiClass() else mcClassType).toJvmType()
                     )
                 }
 
@@ -256,9 +265,11 @@ private data class ClassAbstractor(
             addMethod(
                 methodInfo,
                 name = if (method.isConstructor) "create" else method.name,
-                isFinal = baseClass && !classApi.isInterface,
-                isStatic = method.isStatic || method.isConstructor,
-                isAbstract = false,
+                access = MethodAccess(
+                    isFinal = baseClass && !classApi.isInterface,
+                    isStatic = method.isStatic || method.isConstructor,
+                    isAbstract = false
+                ),
                 returnType = returnType.applyIf(baseClass) { it.copy(annotations = it.annotations + OverrideAnnotation) },
                 typeArguments = if (method.isConstructor) allApiClassTypeArguments() else method.typeArguments.remapDeclToApiClasses()
             )
@@ -376,9 +387,11 @@ private data class ClassAbstractor(
         }
     }
 
-    private fun apiPassedParameters(method: ClassApi.Method): List<Expression> =
+    private fun apiPassedParameters(method: ClassApi.Method): List<Pair<JvmType, Expression>> =
         method.parameters
-            .map { (name, type) -> Expression.Variable(name).castToMcClass(type, doubleCast = true) }
+            .map { (name, type) ->
+                type.toJvmType() to Expression.Variable(name).castToMcClass(type, doubleCast = true)
+            }
 
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
