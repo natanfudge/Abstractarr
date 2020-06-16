@@ -20,6 +20,7 @@ metaUtils {
 //    mcJar.compileClasspath += apiRuntime.output
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
+    sourceSets.test.runtimeClasspath += apiRuntime.output // For verifying asm output
 //    apiRuntime.compileClasspath += mcJar.output
     sourceSets.test.runtimeClasspath += mcJar.output
 //    sourceSets.test.compileClass += mcJar.output

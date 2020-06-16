@@ -13,7 +13,8 @@ import java.nio.file.Path
 data class AbstractionMetadata(
     val versionPackage: VersionPackage,
     val classPath: List<Path>,
-    val includeImplementationDetails: Boolean
+    val includeImplementationDetails: Boolean,
+    val writeRawAsm: Boolean
 )
 
 
@@ -116,8 +117,9 @@ private data class ClassAbstractor(
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
         ) { addClassBody() }
 
+        val codegen = if (metadata.writeRawAsm) AsmCodeGenerator else JavaCodeGenerator
         if (destPath != null) {
-            JavaCodeGenerator.writeClass(classInfo, packageName, destPath)
+            codegen.writeClass(classInfo, packageName, destPath)
         } else {
             requireNotNull(outerClass)
             outerClass.addInnerClass(classInfo, isStatic = !baseClass || classApi.isStatic)

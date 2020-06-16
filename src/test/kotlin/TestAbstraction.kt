@@ -5,9 +5,8 @@ import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
 import testing.getResource
 import util.*
-import java.io.OutputStream
-import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -20,19 +19,61 @@ import javax.tools.ToolProvider
 class TestAbstraction {
 
 
+    private val classes = listOf(
+        "ExtendedInterface", "ExtendedInterfaceRaw", "TestAbstractClass", "TestAbstractImpl",
+        "TestAnnotations", "TestArrays", "TestClashingNames", "TestConcreteClass", "TestEnum", "TestFinalClass",
+        "TestGenerics", "TestInnerExtender", "TestInterface", "TestLambdaInterface", "TestLambdasAnons",
+        "TestNormalClassExtender", "TestOtherClass", "TestOverload", /*"TestOverrideReturnTypeChange",
+        "TestOverrideReturnTypeChangeSuper",*/ "TestSuperClass", "TestThrows"
+    )
+
+    private val noBase = listOf(
+        "ExtendedInterface", "ExtendedInterfaceRaw", "TestEnum", "TestFinalClass",
+        "TestOverrideReturnTypeChange", "TestOverrideReturnTypeChangeSuper", "TestGenerics"
+    )
+
     @Test
     fun testAbstraction() {
 
         val mcJar = getResource("testOriginalJar.jar")
         val dest = mcJar.parent.resolve("abstractedSrc")
-//        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
-        Abstractor.abstract(
-            mcJar, dest, metadata = AbstractionMetadata(
-                versionPackage = VersionPackage("v1"),
-                classPath = listOf(), includeImplementationDetails = true
-            )
-        )
+        val asmDest = mcJar.parent.resolve("abstractedAsm")
 
+//        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
+
+
+        val metadata = AbstractionMetadata(
+            versionPackage = VersionPackage("v1"),
+            classPath = listOf(), includeImplementationDetails = true, writeRawAsm = false
+        )
+        Abstractor.abstract(mcJar, dest, metadata = metadata)
+        Abstractor.abstract(mcJar, asmDest, metadata = metadata.copy(writeRawAsm = true))
+
+        asmDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
+
+        val asmJar = asmDest.convertDirToJar()
+        val classLoader = URLClassLoader(arrayOf(asmJar.toUri().toURL()), this::class.java.classLoader)
+        classes.forEach {
+            try {
+                Class.forName("v1.net.minecraft.I$it", true, classLoader)
+            } catch (e: Throwable) {
+                println("Error in interface of $it:")
+                throw e
+            }
+            try {
+                if (it !in noBase) Class.forName("v1.net.minecraft.Base$it", true, classLoader)
+            } catch (e: Throwable) {
+                println("Error in baseclass of $it:")
+                throw e
+            }
+
+        }
+//        val clazz = Class.forName(name.toDotQualifiedString(), true, classLoader)
+
+        verifyJava(dest)
+    }
+
+    private fun verifyJava(dest: Path) {
         val compiler = ToolProvider.getSystemJavaCompiler()
 
         val diagnostics = DiagnosticCollector<JavaFileObject>()
@@ -51,12 +92,11 @@ class TestAbstraction {
             ).call()
         }
 
-
         val compiledDestDir = Paths.get("${dest}Compiled")
         compiledDestDir.createDirectories()
         dest.recursiveChildren()
             .filter { it.isClassfile() }
-//            .take(1)
+            //            .take(1)
             .forEach {
                 printAsmCode(it)
                 val relativePath = dest.relativize(it)
@@ -64,7 +104,7 @@ class TestAbstraction {
                 target.parent.createDirectories()
                 if (!it.isDirectory()) {
                     it.copyTo(target)
-//                    it.delete()
+                    it.delete()
                 }
             }
         compiledDestDir.convertDirToJar()
