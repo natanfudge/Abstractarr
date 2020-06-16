@@ -1,14 +1,13 @@
 
-buildscript {
-    dependencies {
-        classpath "io.github.febb:BuildMetaUtils:1.0-SNAPSHOT"
-    }
-}
 plugins {
     id("org.jetbrains.kotlin.jvm") version "1.3.72"
 }
 
 def resultTestSet = sourceSets.create("resultTest")
+def metaUtilsSet = sourceSets.create("metaUtils"){
+    compileClasspath += sourceSets.main.compileClasspath
+    runtimeClasspath += sourceSets.main.runtimeClasspath
+}
 
 apply plugin: MetaUtils
 
@@ -17,13 +16,16 @@ metaUtils {
     def mcJar = createJarTest("testOriginalJar")
     def apiRuntime = createJarTest("apiRuntime")
     mcJar.compileClasspath += apiRuntime.output
-//    mcJar.compileClasspath += apiRuntime.output
     resultTestSet.compileClasspath += apiRuntime.output
     resultTestSet.runtimeClasspath += apiRuntime.output
+
     sourceSets.test.runtimeClasspath += apiRuntime.output // For verifying asm output
-//    apiRuntime.compileClasspath += mcJar.output
     sourceSets.test.runtimeClasspath += mcJar.output
-//    sourceSets.test.compileClass += mcJar.output
+    sourceSets.test.compileClasspath += metaUtilsSet.output
+    sourceSets.test.runtimeClasspath += metaUtilsSet.output
+
+    sourceSets.main.compileClasspath += metaUtilsSet.output
+    sourceSets.main.runtimeClasspath += metaUtilsSet.output
 
     mcJarWithInterfaces = createAttachInterfacesTask(mcJar.output.classesDirs.files)
     tasks.attachInterfaces.dependsOn("testOriginalJarClasses")
@@ -33,8 +35,6 @@ metaUtils {
 }
 tasks.compileTestOriginalJarJava.options.compilerArgs += "-parameters"
 
-//D:\a\Abstractarr\Abstractarr\build\resources\test\
-// D:\a\Abstractarr\Abstractarr\build\resources\test
 configurations {
     resultTestCompile.extendsFrom testCompile
     resultTestRuntime.extendsFrom testRuntime
@@ -67,7 +67,8 @@ dependencies {
     implementation("org.ow2.asm:asm:8.0.1")
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation 'org.ow2.asm:asm-tree:8.0.1'
-    implementation("io.github.febb:MetaUtils:1.0-SNAPSHOT")
+    implementation 'com.squareup:javapoet:1.12.1'
+//    implementation("io.github.febb:MetaUtils:1.0-SNAPSHOT")
 
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.3.72'
     testRuntime('org.junit.jupiter:junit-jupiter-engine:5.4.2')
