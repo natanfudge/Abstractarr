@@ -2,3 +2,7 @@
 	path = src/metaUtils
 	url = https://github.com/IntransientMC/MetaUtils
 	branch = master
+[submodule "src/metaUtils"]
+	path = src/metaUtils
+	url = https://github.com/IntransientMC/MetaUtils
+	branch = master
