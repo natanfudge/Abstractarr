@@ -1,14 +1,17 @@
 import abstractor.VersionPackage
 import abstractor.isMcClass
+import abstractor.isMcClassName
 import api.*
 import codegeneration.*
 import descriptor.JvmPrimitiveType
 import descriptor.JvmType
 import descriptor.ObjectType
 import descriptor.ReturnDescriptor
+import org.objectweb.asm.tree.InnerClassNode
 import signature.*
 import util.*
 import java.nio.file.Path
+
 
 data class AbstractionMetadata(
     val versionPackage: VersionPackage,
@@ -73,6 +76,12 @@ private data class ClassAbstractor(
     private val baseClass: Boolean
 ) {
 
+    val apiInterfaceAccess = ClassAccess(
+        isFinal = false,
+        variant = ClassVariant.Interface
+    )
+    val apiInterfaceVisiblity = ClassVisibility.Public
+
     /**
      * destPath == null and outerClass != null when it's an inner class
      */
@@ -105,11 +114,8 @@ private data class ClassAbstractor(
         }
 
         val classInfo = ClassInfo(
-            visibility = ClassVisibility.Public,
-            access = ClassAccess(
-                isFinal = false,
-                variant = if (isInterface) ClassVariant.Interface else ClassVariant.AbstractClass
-            ),
+            visibility = apiInterfaceVisiblity,
+            access = apiInterfaceAccess.applyIf(!isInterface) { it.copy(variant = ClassVariant.AbstractClass) },
             shortName = shortName.innermostClass(),
             typeArguments = allApiClassTypeArguments(),
             superInterfaces = interfaces,
@@ -156,6 +162,25 @@ private data class ClassAbstractor(
 
 
     private fun GeneratedClass.addClassBody() {
+        // Resolving the inner classes on our own is quite difficult, so we will just pass what we get from parsing the original mc class
+        if (this is AsmGeneratedClass) {
+            with(metadata.versionPackage) {
+                val apiClasses = classApi.asmInnerClasses.map { it.name.toQualifiedName(dotQualified = false) }
+                    .filter { it.isMcClassName() }
+                    .map {
+                        val qualifiedName = it.toApiClass()
+                        InnerClassNode(
+                            qualifiedName.toSlashQualifiedString(),
+                            qualifiedName.copy(shortName = qualifiedName.shortName.outerClass())
+                                .toSlashQualifiedString(),
+                            qualifiedName.shortName.innermostClass(),
+                            apiInterfaceAccess.toAsmAccess(apiInterfaceVisiblity, isStatic = true)
+                        )
+                    }
+
+                addAsmInnerClasses(apiClasses + classApi.asmInnerClasses)
+            }
+        }
         for (method in classApi.methods) {
             abstractMethod(method)
         }
@@ -221,7 +246,7 @@ private data class ClassAbstractor(
         ) {
             val passedParameters = apiPassedParameters(method)
             if (method.isConstructor && baseClass) {
-                addStatement(ConstructorCall.Super(passedParameters,superType = mcClassType.toJvmType()))
+                addStatement(ConstructorCall.Super(passedParameters, superType = mcClassType.toJvmType()))
             } else {
                 val call = if (method.isConstructor) {
                     MethodCall.Constructor(
@@ -361,7 +386,9 @@ private data class ClassAbstractor(
     ): FieldExpression {
         val mcClassType = classApi.asRawType()
         return FieldExpression(
-            receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType()) else ThisExpression.castFromApiToMc(mcClassType),
+            receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType()) else ThisExpression.castFromApiToMc(
+                mcClassType
+            ),
             name = field.name,
             owner = classApi.asJvmType(),
             type = field.type.toJvmType()
@@ -386,7 +413,7 @@ private data class ClassAbstractor(
                 addStatement(
                     ReturnStatement(
                         MethodCall.Constructor(
-                            constructing = innerClass.innerMostClassNameAsType(),
+                            constructing = constructedInnerClass,
                             parameters = apiPassedParameters(constructor),
                             receiver = ThisExpression.castFromApiToMc(classApi.asRawType())
                         ).castFromMcToApi(constructedInnerClass)

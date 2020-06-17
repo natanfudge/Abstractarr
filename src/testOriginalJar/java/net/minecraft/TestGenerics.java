@@ -3,9 +3,10 @@ package net.minecraft;
 import java.util.ArrayList;
 import java.util.List;
 
-public class TestGenerics<T1 extends ArrayList<TestConcreteClass>,
-        T2 extends T1, T3 extends List<T2>, T4> extends ArrayList<T3> implements List<T3>,
-        Comparable<TestInterface>, ExtendedInterface<TestAbstractImpl>, ExtendedInterfaceRaw {
+public class TestGenerics<T1 extends ArrayList<TestConcreteClass>
+        ,T2 extends T1, T3 extends List<T2>, T4> extends ArrayList<T3> implements List<T3>,
+        Comparable<TestInterface>, ExtendedInterface<TestAbstractImpl>, ExtendedInterfaceRaw
+{
     @Override
     public int compareTo(TestInterface o) {
         return 2;
