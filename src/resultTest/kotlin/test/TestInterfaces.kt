@@ -3,6 +3,7 @@ package test
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
+@Suppress("USELESS_IS_CHECK", "UNUSED_VARIABLE")
 class TestInterfaces {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 

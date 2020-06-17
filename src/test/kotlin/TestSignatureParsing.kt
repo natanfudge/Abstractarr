@@ -4,6 +4,7 @@ import signature.*
 import testing.getResource
 import kotlin.test.assertEquals
 
+@Suppress("UNUSED_VARIABLE")
 class TestSignatureParsing {
     @Test
     fun testSignatures() {

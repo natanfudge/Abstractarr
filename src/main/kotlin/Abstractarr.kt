@@ -1,11 +1,11 @@
 import abstractor.VersionPackage
 import abstractor.isMcClass
-import abstractor.isMcPackage
 import api.*
 import codegeneration.*
 import descriptor.JvmPrimitiveType
 import descriptor.JvmType
 import descriptor.ObjectType
+import descriptor.ReturnDescriptor
 import signature.*
 import util.*
 import java.nio.file.Path
@@ -48,7 +48,7 @@ object Abstractor {
         val index = indexClasspath(metadata.classPath + listOf(mcJar) /*+ getJvmBootClasses()*/)
 
         for (classApi in ClassApi.readFromJar(mcJar)
-//            .filter { it.name.shortName.startsWith("TestGenerics") }
+//            .filter { it.name.shortName.startsWith("ExtendedInterface") }
         ) {
             if (!classApi.isPublicApi) continue
             ClassAbstractor(metadata, index, classApi, baseClass = false).abstractClass(
@@ -186,8 +186,8 @@ private data class ClassAbstractor(
         if (baseClass) {
             // Baseclasses only exist for you to override methods
             if (method.isFinal || method.isStatic) return
-            // TODO: there's no real way to overload methods that only differ in return type, at least in java
-            if (/*method.returnType.castRequiredToMcClass() &&*/ method.parameters.values.none { it.castRequiredToMcClass() }) return
+//            // TODO: there's no real way to overload methods that only differ in return type, at least in java
+//            if (/*method.returnType.castRequiredToMcClass() &&*/ method.parameters.values.none { it.castRequiredToMcClass() }) return
             // Abstract baseclass methods are abstract too, but since the api interface already declares the method there's no need to declare it again
             if (method.isAbstract) return
             if (!metadata.includeImplementationDetails) return
@@ -220,30 +220,33 @@ private data class ClassAbstractor(
             parameters = if (baseClass) method.parameters else apiParametersDeclaration(method)
         ) {
             val passedParameters = apiPassedParameters(method)
-            val statement = if (method.isConstructor && baseClass) Statement.ConstructorCall.Super(passedParameters)
-            else {
+            if (method.isConstructor && baseClass) {
+                addStatement(ConstructorCall.Super(passedParameters,superType = mcClassType.toJvmType()))
+            } else {
                 val call = if (method.isConstructor) {
-                    Expression.Call.Constructor(
+                    MethodCall.Constructor(
                         constructing = mcClassType,
                         parameters = passedParameters,
                         receiver = null
                     )
                 } else {
-                    Expression.Call.Method(
+                    MethodCall.Method(
                         receiver = when {
-                            method.isStatic -> ClassReceiver(mcClassType)
-                            baseClass -> /*Expression.This*/ null
-                            else -> Expression.This.castTo(mcClassType)
+                            method.isStatic -> ClassReceiver(classApi.asJvmType())
+                            baseClass -> /*ThisExpression*/ null
+                            else -> ThisExpression.castFromApiToMc(mcClassType)
                         },
                         parameters = if (baseClass) method.parameters.map { (name, type) ->
-                            type.toJvmType() to Expression.Variable(name)
-                                .castFromMcToApiClass(type, doubleCast = true, forceCast = true)
+                            type.remapToApiClass().toJvmType() to VariableExpression(name)
+//                                .castFromMcToApiClass(type, doubleCast = true, forceCast = true)
                         }
                         else passedParameters,
                         name = method.name,
                         methodAccess = method.access,
-                        receiverAccess = classApi.access,
+                        receiverAccess = classApi.access.copy(variant = if (baseClass) ClassVariant.Interface else classApi.access.variant),
                         returnType = (if (baseClass) returnType else mcReturnType).toJvmType(),
+                        // In an api interface, call the mc method, in a baseclass, call the api interface
+                        // (so when mc calls it it will reach the api overrides)
                         owner = (if (baseClass) mcClassType.remapToApiClass() else mcClassType).toJvmType()
                     )
                 }
@@ -252,13 +255,14 @@ private data class ClassAbstractor(
                     check(mcReturnType.type is GenericTypeOrPrimitive) // because it's not void
                     @Suppress("UNCHECKED_CAST")
                     val returnedValue =
-                        if (baseClass) call.castToMcClass(returnType as JavaType<GenericTypeOrPrimitive>) else
-                            call.castFromMcToApiClass(mcReturnType as JavaType<GenericTypeOrPrimitive>)
-                    Statement.Return(returnedValue)
-                } else call
+                        if (baseClass) call.castFromApiToMc(returnType as JavaType<GenericTypeOrPrimitive>) else
+                            call.castFromMcToApi(mcReturnType as JavaType<GenericTypeOrPrimitive>)
+                    addStatement(ReturnStatement(returnedValue))
+                } else addStatement(call)
+
+
             }
 
-            addStatement(statement)
         }
 
         if (method.isConstructor && baseClass) {
@@ -267,11 +271,12 @@ private data class ClassAbstractor(
             addMethod(
                 methodInfo,
                 name = if (method.isConstructor) "create" else method.name,
-                access = MethodAccess(
-                    isFinal = baseClass && !classApi.isInterface,
-                    isStatic = method.isStatic || method.isConstructor,
-                    isAbstract = false
-                ),
+//                access = MethodAccess(
+                isFinal = baseClass && !classApi.isInterface,
+                isStatic = method.isStatic || method.isConstructor,
+                isAbstract = false
+//                ),
+                ,
                 returnType = returnType.applyIf(baseClass) { it.copy(annotations = it.annotations + OverrideAnnotation) },
                 typeArguments = if (method.isConstructor) allApiClassTypeArguments() else method.typeArguments.remapDeclToApiClasses()
             )
@@ -295,7 +300,7 @@ private data class ClassAbstractor(
         addField(
             name = field.name, isFinal = true, isStatic = true, visibility = Visibility.Public,
             type = field.type.remapToApiClass(),
-            initializer = abstractedFieldExpression(field).castFromMcToApiClass(field.type)
+            initializer = abstractedFieldExpression(field).castFromMcToApi(field.type)
         )
     }
 
@@ -318,8 +323,8 @@ private data class ClassAbstractor(
         ) {
             val fieldAccess = abstractedFieldExpression(field)
             addStatement(
-                Statement.Return(
-                    fieldAccess.castFromMcToApiClass(field.type)
+                ReturnStatement(
+                    fieldAccess.castFromMcToApi(field.type)
                 )
             )
         }
@@ -343,9 +348,9 @@ private data class ClassAbstractor(
             throws = listOf()
         ) {
             addStatement(
-                Statement.Assignment(
+                AssignmentStatement(
                     target = abstractedFieldExpression(field),
-                    assignedValue = Expression.Variable(field.name).castToMcClass(field.type)
+                    assignedValue = VariableExpression(field.name).castFromApiToMc(field.type)
                 )
             )
         }
@@ -353,11 +358,13 @@ private data class ClassAbstractor(
 
     private fun abstractedFieldExpression(
         field: ClassApi.Field
-    ): Expression.Field {
+    ): FieldExpression {
         val mcClassType = classApi.asRawType()
-        return Expression.Field(
-            owner = if (field.isStatic) ClassReceiver(mcClassType) else Expression.This.castTo(mcClassType),
-            name = field.name
+        return FieldExpression(
+            receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType()) else ThisExpression.castFromApiToMc(mcClassType),
+            name = field.name,
+            owner = classApi.asJvmType(),
+            type = field.type.toJvmType()
         )
     }
 
@@ -377,12 +384,12 @@ private data class ClassAbstractor(
                 throws = constructor.throws
             ) {
                 addStatement(
-                    Statement.Return(
-                        Expression.Call.Constructor(
+                    ReturnStatement(
+                        MethodCall.Constructor(
                             constructing = innerClass.innerMostClassNameAsType(),
                             parameters = apiPassedParameters(constructor),
-                            receiver = Expression.This.castTo(classApi.asRawType())
-                        ).castFromMcToApiClass(constructedInnerClass, doubleCast = doubleCastRequired(innerClass))
+                            receiver = ThisExpression.castFromApiToMc(classApi.asRawType())
+                        ).castFromMcToApi(constructedInnerClass)
                     )
                 )
             }
@@ -390,10 +397,9 @@ private data class ClassAbstractor(
     }
 
     private fun apiPassedParameters(method: ClassApi.Method): List<Pair<JvmType, Expression>> =
-        method.parameters
-            .map { (name, type) ->
-                type.toJvmType() to Expression.Variable(name).castToMcClass(type, doubleCast = true)
-            }
+        method.parameters.map { (name, type) ->
+            type.toJvmType() to VariableExpression(name).castFromApiToMc(type)
+        }
 
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
@@ -413,10 +419,10 @@ private data class ClassAbstractor(
             throws = listOf()
         ) {
             addStatement(
-                Statement.Return(
-                    Expression.ArrayConstructor(
+                ReturnStatement(
+                    ArrayConstructor(
                         classApi.asRawType(),
-                        size = Expression.Variable(ArrayFactorySizeParamName)
+                        size = VariableExpression(ArrayFactorySizeParamName)
                     )
                 )
             )
@@ -460,6 +466,9 @@ private data class ClassAbstractor(
     private fun <T : GenericReturnType> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }
 
+    private fun <T : ReturnDescriptor> T.remapToApiClass(): T =
+        with(metadata.versionPackage) { remapToApiClass() }
+
     private fun List<TypeArgumentDeclaration>.remapDeclToApiClasses(): List<TypeArgumentDeclaration> =
         with(metadata.versionPackage) { remapDeclToApiClasses() }
 
@@ -471,44 +480,63 @@ private data class ClassAbstractor(
      * Casting from Super[] to Child[] will always fail.
      */
 
+//
+//    // Since api classes are superinterfaces of mc classes, in most cases a cast is not required.
+//    private fun JavaType<*>.castRequiredToApiClass(): Boolean = when {
+////        type is TypeVariable -> true
+//        type !is ClassGenericType && type !is ArrayGenericType -> castRequiredToMcClass()
+//        else -> type.getContainedClassesRecursively()
+//            // Don't include the top-level class type (or in arrays, the class type in the top level array)
+//            .filter {
+//                when (val type = type) {
+//                    is ClassGenericType -> it != type
+//                    is ArrayGenericType -> it != type.componentType
+//                    else -> error("impossible")
+//                }
+//            }
+//            .any { it.packageName.isMcPackage() }
+//    }
+//
+//    //TODO: clean up the casting ordeal...
+//
+//    private fun Expression.castFromMcToApiClass(
+//        type: AnyJavaType,
+//        doubleCast: Boolean? = null,
+//        forceCast: Boolean = false // In this case cast even when going from a mc class to an API class
+//    ): Expression =
+//        if (if (forceCast) type.castRequiredToMcClass() else type.castRequiredToApiClass()) {
+//            this.castTo(type.remapToApiClass(), doubleCast)
+//        } else this
+//
+//
+//    private fun Expression.castToMcClass(type: AnyJavaType, doubleCast: Boolean? = null): Expression =
+//        if (type.castRequiredToMcClass()) castTo(type, doubleCast) else this
+//
+//    private fun JavaType<*>.castRequiredToMcClass(): Boolean =
+//        /*type is TypeVariable ||*/ type.getContainedClassesRecursively()
+//        .any { it.packageName.isMcPackage() }
+//
+//    // TODO: remove occourences of forcing double cast
+//    @Suppress("UNUSED_PARAMETER")
+//    fun Expression.castTo(type: AnyJavaType, forceDoubleCast: Boolean? = null): Expression =
+//        castExpressionTo(type, /*forceDoubleCast ?:*/ doubleCastRequired(classApi))
 
-    // Since api classes are superinterfaces of mc classes, in most cases a cast is not required.
-    private fun JavaType<*>.castRequiredToApiClass(): Boolean = when {
-        type is TypeVariable -> true
-        type !is ClassGenericType && type !is ArrayGenericType -> castRequiredToMcClass()
-        else -> type.getContainedClassesRecursively()
-            // Don't include the top-level class type (or in arrays, the class type in the top level array)
-            .filter {
-                when (val type = type) {
-                    is ClassGenericType -> it != type
-                    is ArrayGenericType -> it != type.componentType
-                    else -> error("impossible")
-                }
-            }
-            .any { it.packageName.isMcPackage() }
+
+    private fun Expression.castFromMcToApi(mcClass: AnyJavaType) = cast(mcClass, mcClass.remapToApiClass())
+    private fun Expression.castFromApiToMc(mcClass: AnyJavaType) = cast(mcClass.remapToApiClass(), mcClass)
+
+    private fun Expression.cast(fromType: AnyJavaType, toType: AnyJavaType) = if (fromType.isAssignableTo(toType)) this
+    else CastExpression(this, toType)
+
+    private fun JvmType.isAssignableTo(otherType: JvmType): Boolean {
+        if (this == otherType) return true
+        if (this.remapToApiClass() == otherType) return true
+        // Technically this can be true in more cases but that requires using the classpath and it's not relevant for our purposes
+        return false
     }
 
-    //TODO: clean up the casting ordeal...
-
-    private fun Expression.castFromMcToApiClass(
-        type: AnyJavaType,
-        doubleCast: Boolean? = null,
-        forceCast: Boolean = false // In this case cast even when going from a mc class to an API class
-    ): Expression =
-        if (if (forceCast) type.castRequiredToMcClass() else type.castRequiredToApiClass()) {
-            this.castTo(type.remapToApiClass(), doubleCast)
-        } else this
-
-
-    private fun Expression.castToMcClass(type: AnyJavaType, doubleCast: Boolean? = null): Expression =
-        if (type.castRequiredToMcClass()) castTo(type, doubleCast) else this
-
-    private fun JavaType<*>.castRequiredToMcClass(): Boolean =
-        type is TypeVariable || type.getContainedClassesRecursively()
-            .any { it.packageName.isMcPackage() }
-
-    fun Expression.castTo(type: AnyJavaType, forceDoubleCast: Boolean? = null): Expression =
-        castExpressionTo(type, forceDoubleCast ?: doubleCastRequired(classApi))
+    // When assigning types, only the underlying JvmType matters
+    private fun AnyJavaType.isAssignableTo(otherType: AnyJavaType) = toJvmType().isAssignableTo(otherType.toJvmType())
 }
 
 

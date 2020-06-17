@@ -49,10 +49,19 @@ class TestAbstraction {
         Abstractor.abstract(mcJar, dest, metadata = metadata)
         Abstractor.abstract(mcJar, asmDest, metadata = metadata.copy(writeRawAsm = true))
 
-        asmDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
         val asmJar = asmDest.convertDirToJar()
-        val classLoader = URLClassLoader(arrayOf(asmJar.toUri().toURL()), this::class.java.classLoader)
+        asmDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
+        verifyBytecode(asmJar)
+//        verifyJava(dest)
+    }
+
+    private fun verifyBytecode(asmJar: Path) {
+        val mcJarWithInterfaces = Paths.get("testdata/mcJarWithInterfaces.jar")
+        val classLoader = URLClassLoader(
+            arrayOf(asmJar.toUri().toURL(), mcJarWithInterfaces.toUri().toURL())
+            /* , this::class.java.classLoader*/
+        )
         classes.forEach {
             try {
                 Class.forName("v1.net.minecraft.I$it", true, classLoader)
@@ -68,9 +77,6 @@ class TestAbstraction {
             }
 
         }
-//        val clazz = Class.forName(name.toDotQualifiedString(), true, classLoader)
-
-        verifyJava(dest)
     }
 
     private fun verifyJava(dest: Path) {

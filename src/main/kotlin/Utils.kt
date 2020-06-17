@@ -8,7 +8,7 @@ import util.*
 
 
 @Suppress("UNUSED_PARAMETER")
-internal fun doubleCastRequired(classApi: ClassApi) = true /*classApi.isFinal*/ // the rules seem too ambiguous
+internal fun doubleCastRequired(classApi: ClassApi) = false /*true*/ /*classApi.isFinal*/ // the rules seem too ambiguous
 
 
 
