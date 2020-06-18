@@ -56,6 +56,7 @@ class TestInterfaces {
             assertEquals(publicInt(), 2)
             assertEquals(mutatesField(), 123)
             assertEquals(finalMethod(), 3)
+
             //TODO: investigate why inner classes are not getting the interface
             //TODO: base classes look like infinite recursion, need to use some super shit?
             val value = innerClassMethod()

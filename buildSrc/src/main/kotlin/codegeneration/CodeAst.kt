@@ -1,6 +1,7 @@
 package codegeneration
 
 
+
 enum class ClassVariant {
     Interface,
     ConcreteClass,
@@ -10,7 +11,12 @@ enum class ClassVariant {
 }
 
 data class ClassAccess(val isFinal: Boolean, val variant: ClassVariant)
-data class MethodAccess(val isStatic: Boolean, val isFinal: Boolean, val isAbstract: Boolean)
+data class MethodAccess(
+    val isStatic: Boolean,
+    val isFinal: Boolean,
+    val isAbstract: Boolean,
+    val visibility: Visibility
+)
 
 sealed class Visibility {
     companion object
@@ -33,3 +39,5 @@ sealed class ClassVisibility : Visibility() {
         override fun toString(): String = ""
     }
 }
+
+val Visibility.isPrivate get() = this == ClassVisibility.Private

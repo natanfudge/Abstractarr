@@ -13,6 +13,23 @@ import signature.*
 import util.*
 import java.nio.file.Path
 
+fun ClassApi.Companion.readFromJar(jarPath: Path): Collection<ClassApi> {
+    require(jarPath.hasExtension(".jar")) { "Specified path $jarPath does not point to a jar" }
+
+    // Only pass top-level classes into readSingularClass()
+
+    return jarPath.openJar { jar ->
+        val root = jar.getPath("/")
+        root.walk().asSequence().readFromSequence(root)
+    }
+}
+
+
+fun ClassApi.Companion.readFromDirectory(dirPath: Path): Collection<ClassApi> {
+    require(dirPath.isDirectory()) { "Specified path $dirPath is not a directory" }
+
+    return dirPath.recursiveChildren().readFromSequence(dirPath)
+}
 
 fun ClassApi.Companion.readFromList(
     list: List<Path>,
@@ -52,7 +69,9 @@ private fun readSingularClass(
         typeArguments = listOf()
     )
 
-    val innerClasses = classNode.innerClasses.map { it.name to it }.toMap()
+//    val innerClasses = classNode.innerClasses.map { it.name to it }.toMap()
+    val innerClassShortName = with(fullClassName.shortName.components) { if (size == 1) null else last() }
+
 
     // Unfortunate hack to get the outer class reference into the inner classes
     var classApi: ClassApi? = null
@@ -63,15 +82,16 @@ private fun readSingularClass(
         },
         superInterfaces = signature.superInterfaces.map { JavaClassType(it, annotations = listOf()) },
         methods = methods.toSet(), fields = fields.toSet(),
-        innerClasses = classNode.nestMembers
-            ?.map {
+        innerClasses = classNode.innerClasses
+            .filter { innerClassShortName != it.innerName && it.outerName == classNode.name }
+            .map {
                 readSingularClass(
                     rootPath,
-                    rootPath.resolve("$it.class"),
+                    rootPath.resolve("${it.name}.class"),
                     lazy { classApi!! },
-                    isStatic = innerClasses.getValue(it).isStatic
+                    isStatic = it.isStatic
                 )
-            } ?: listOf(),
+            },
         outerClass = outerClass,
         visibility = classNode.visibility,
         access = ClassAccess(
@@ -88,7 +108,8 @@ private fun readSingularClass(
         ),
         isStatic = isStatic,
         typeArguments = signature.typeArguments ?: listOf(),
-        annotations = parseAnnotations(classNode.visibleAnnotations, classNode.invisibleAnnotations)
+        annotations = parseAnnotations(classNode.visibleAnnotations, classNode.invisibleAnnotations),
+        asmInnerClasses = classNode.innerClasses
     )
 
     return classApi
@@ -167,10 +188,11 @@ private fun readMethod(
                 )
             }.toMap(),
         throws = signature.throwsSignatures.map { it.noAnnotations() },
-        visibility = visibility,
         access = MethodAccess(isStatic = method.isStatic,
             isFinal = method.isFinal,
-            isAbstract = method.isAbstract)
+            isAbstract = method.isAbstract,
+            visibility = visibility
+        )
     )
 }
 

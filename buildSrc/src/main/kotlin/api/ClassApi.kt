@@ -4,6 +4,7 @@ import codegeneration.ClassAccess
 import codegeneration.ClassVisibility
 import codegeneration.MethodAccess
 import codegeneration.Visibility
+import org.objectweb.asm.tree.InnerClassNode
 import signature.*
 import util.QualifiedName
 import util.includeIf
@@ -31,7 +32,8 @@ class ClassApi(
     val methods: Collection<Method>,
     val fields: Collection<Field>,
     val innerClasses: List<ClassApi>,
-    val outerClass: Lazy<ClassApi>?
+    val outerClass: Lazy<ClassApi>?,
+    val asmInnerClasses: List<InnerClassNode>
 ) : Visible {
 
     override fun toString(): String {
@@ -56,13 +58,13 @@ class ClassApi(
         val parameters: Map<String, AnyJavaType>,
         val typeArguments: List<TypeArgumentDeclaration>,
         val throws : List<JavaThrowableType>,
-        override val visibility: Visibility,
         val access: MethodAccess
     ) : Member() {
         override fun toString() = "static ".includeIf(isStatic) +
                 "$name(${parameters.map { (name, type) -> "$name: $type" }}): $returnType"
 
         override val isStatic = access.isStatic
+        override val visibility = access.visibility
     }
 
     data class Field(
@@ -75,6 +77,12 @@ class ClassApi(
         override fun toString() = "static ".includeIf(isStatic) + "$name: $type"
     }
 
+
+
+//    override fun toString(): String {
+//        return "Class {\nmethods: [\n" + methods.joinToString("\n") { "\t$it" } +
+//                "\n]\nfields: [\n" + fields.joinToString("\n") { "\t$it" } + "\n]\n}"
+//    }
 }
 
 

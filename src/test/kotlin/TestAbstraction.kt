@@ -36,23 +36,27 @@ class TestAbstraction {
     fun testAbstraction() {
 
         val mcJar = getResource("testOriginalJar.jar")
-        val dest = mcJar.parent.resolve("abstractedSrc")
-        val asmDest = mcJar.parent.resolve("abstractedAsm")
+//        val dest = mcJar.parent.resolve("abstractedSrc")
+        val implDest = mcJar.parent.resolve("abstractedAsm")
+        val apiDest = mcJar.parent.resolve("abstractedAsmApi")
 
-//        val classPath = System.getProperty("java.class.path").split(';').map { Paths.get(it) }
 
 
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
-            classPath = listOf(), includeImplementationDetails = true, writeRawAsm = false
+            classPath = listOf(), fitToPublicApi = false, writeRawAsm = true
         )
-        Abstractor.abstract(mcJar, dest, metadata = metadata)
-        Abstractor.abstract(mcJar, asmDest, metadata = metadata.copy(writeRawAsm = true))
+//        Abstractor.abstract(mcJar, dest, metadata = metadata)
+        Abstractor.abstract(mcJar, implDest, metadata = metadata)
+        Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
 
 
-        val asmJar = asmDest.convertDirToJar()
-        asmDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
+        val asmJar = implDest.convertDirToJar()
+        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
         verifyBytecode(asmJar)
+
+        apiDest.convertDirToJar()
+
 //        verifyJava(dest)
     }
 

@@ -50,8 +50,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
                 val allInputs = inputChildren.filter { !it.isDirectory() }.toList()
                 val inputsParsed = ClassApi.readFromList(allInputs, rootPath = targetClassPath)
                     .matchToPaths(rootPath = targetClassPath)
-                val outputDir = File(targetClassDir.parentFile, targetClassDir.nameWithoutExtension + "WithInterfaces")
-                    .toPath()
+                val outputDir = project.file("testdata/mcJarWithInterfaces").toPath()
                 val outputsToInputs = allInputs.associateBy { path ->
                     val relativePath = targetClassPath.relativize(path).toString()
                     outputDir.resolve(relativePath)
