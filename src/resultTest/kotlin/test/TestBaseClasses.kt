@@ -142,6 +142,7 @@ class TestBaseClasses {
         assertEquals(ITestFinalClass.getPublicStaticField(), null)
         ITestFinalClass.setPublicStaticField("bar")
         assertEquals(ITestFinalClass.getPublicStaticField(), "bar")
+        ITestFinalClass.setPublicStaticField(null)
         assert(ITestFinalClass.publicStaticOtherClassField is ITestOtherClass)
         with(ITestFinalClass.create(ITestOtherClass.create())) {
             assertEquals(inheritedMethod(), 2)
