@@ -8,7 +8,7 @@ import kotlin.test.assertEquals
 class TestSignatureParsing {
     @Test
     fun testSignatures() {
-        val classNode = readToClassNode(getResource("GenericsTest.class"))
+        val classNode = readToClassNode(getResource("GenericsTest.fuckresources"))
         val classSignature = ClassSignature.readFrom(classNode.signature)
         testClass(classSignature, classNode.signature)
 
