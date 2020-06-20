@@ -114,11 +114,16 @@ class TestBaseClasses {
     @Test
     fun testConcreteClass() {
         with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
+        }) {
+            testConcreteClassCalls()
+
+        }
+
+        with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
             override fun publicInt(p0: ITestOtherClass?): Int {
                 return 3
             }
         }) {
-            testConcreteClassCalls()
             val mcThis = this as TestConcreteClass
             assertEquals(mcThis.publicInt(null), 3)
         }
