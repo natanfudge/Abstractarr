@@ -1,7 +1,6 @@
 .gradle/
 .idea/
 build/
-src/test/resources/*
 !src/test/resources/dummyResource
 out/
 testdata/

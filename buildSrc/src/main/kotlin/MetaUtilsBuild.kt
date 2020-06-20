@@ -29,7 +29,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
             group = "testing"
             task.from(sourceSet.output)
 
-            task.destinationDirectory.set(sourceSets.getByName("test").resources.srcDirs.first())
+            task.destinationDirectory.set(sourceSets.getByName("test").output.resourcesDir)
             task.archiveFileName.set("$name.jar")
         }
 
