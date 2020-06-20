@@ -11,6 +11,10 @@ public class TestAbstractImpl extends TestAbstractClass implements TestInterface
         return new TestAbstractImpl(1, null);
     }
 
+    public void someImplMethodWithArg(TestOtherClass foo) {
+
+    }
+
     @Override
     public TestAbstractClass abstractMethodParam(TestConcreteClass x) {
         return new TestAbstractImpl(2, new TestAbstractImpl(3, null));

@@ -1,14 +1,13 @@
 import abstractor.VersionPackage
 import abstractor.isMcClass
-import abstractor.isMcClassName
 import api.*
 import codegeneration.*
+import codegeneration.asm.AsmCodeGenerator
+import codegeneration.asm.toAsmAccess
 import descriptor.JvmPrimitiveType
 import descriptor.JvmType
 import descriptor.ObjectType
 import descriptor.ReturnDescriptor
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.tree.InnerClassNode
 import signature.*
 import util.*
 import java.nio.file.Path
@@ -21,32 +20,10 @@ data class AbstractionMetadata(
     val writeRawAsm: Boolean
 )
 
-//TODO: let the asm thing accept a classpath index, and add access to the classpath index, instead of the hardcoding we have now.
+//TODO: add tests for protected methods
 
 
 //TODO: for parameter names and docs, generate a java source alongside the asm source.
-
-
-// TODO: handle protected methods, they should be exposed through a seperate api class that is only applied to baseclasses
-
-//TODO:
-// baseclasses
-//TODO: list of wanted asm magic:
-// - jdk interfaces of mc classes
-// - Overloads with different return type (i.e. methods that the only mc class in it is in the return type)
-// - Remove casts
-// - Final interfaces
-// - Add type bounds without them being checked (enums, other supertyped cases)
-// - Maybe all generics in general should be with asm?
-// i.e.:
-//class McClass1<T extends JdkClass>
-//class MCClass2 extends JdkClass
-//class McClass3 extends McClass1<McClass2>
-//
-//-- >
-//interface IMcClass1<T cextends JdkClass>
-//interface IMCClass2 extends SuperTyped<JdkClass>
-//interface IMcClass3 extends SuperTyped<IMcClass2> // boom!!! IMcClass2 does not extend JdkClass
 
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
@@ -56,41 +33,81 @@ object Abstractor {
         destDir.deleteRecursively()
         destDir.createDirectory()
 
-        val index = indexClasspath(metadata.classPath + listOf(mcJar) /*+ getJvmBootClasses()*/)
-
         val classes = ClassApi.readFromJar(mcJar)
+        val classNamesToClasses = classes.map { it.name to it }.toMap()
+
+        // We need to add the access of api interfaces, base classes, and base api interfaces.
+        // For other things in ClassEntry we just pass empty list in assumption they won't be needed.
+        val additionalEntries = listAllGeneratedClasses(classes, metadata)
+
+        val index = indexClasspath(metadata.classPath + listOf(mcJar), additionalEntries)
+
+
 
         for (classApi in classes
-//            .filter { it.name.shortName.startsWith("ExtendedInterface") }
+//            .filter { it.name.shortName.startsWith("TestOverrideReturnTypeChange") }
         ) {
             if (!classApi.isPublicApi) continue
-            ClassAbstractor(metadata, index, classApi/*, baseClass = false*/).abstractClass(
+            ClassAbstractor(metadata, index, classApi, classNamesToClasses).abstractClass(
                 destPath = destDir,
                 outerClass = null
             )
         }
     }
+
+
 }
+
+private fun listAllGeneratedClasses(
+    classes: Collection<ClassApi>,
+    metadata: AbstractionMetadata
+): Map<QualifiedName, ClassEntry> = with(metadata.versionPackage) {
+    classes.flatMap { outerClass ->
+        outerClass.allInnerClassesAndThis().filter { it.isPublic }.flatMap {
+            val apiInterface = it.name.toApiClass() to entryJustForAccess(
+                apiInterfaceAccess(metadata), isStatic = it.isInnerClass
+            )
+
+//            val apiBaseclassInterface = it.name.toBaseApiInterface() to entryJustForAccess(
+//                apiInterfaceAccess(metadata), isStatic = it.isInnerClass
+//            )
+
+            val baseclass = it.name.toBaseClass() to entryJustForAccess(
+                baseClassAccess(origIsInterface = it.isInterface), isStatic = it.isStatic
+            )
+
+            listOf(apiInterface, baseclass)
+        }
+    }.toMap()
+}
+
+private fun entryJustForAccess(access: ClassAccess, isStatic: Boolean): ClassEntry {
+    return ClassEntry(
+        methods = setOf(), superInterfaces = listOf(), superClass = null,
+        access = access.toAsmAccess(ClassVisibility.Public, isStatic)
+    )
+}
+
+
+private fun apiInterfaceAccess(metadata: AbstractionMetadata) = ClassAccess(
+    isFinal = metadata.fitToPublicApi,
+    variant = ClassVariant.Interface
+)
+
+private val apiClassVisibility = ClassVisibility.Public
+
+private fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
+    isFinal = false,
+    variant = if (origIsInterface) ClassVariant.Interface else ClassVariant.AbstractClass
+)
 
 
 private data class ClassAbstractor(
     private val metadata: AbstractionMetadata,
     private val index: ClasspathIndex,
-    private val classApi: ClassApi
+    private val classApi: ClassApi,
+    private val mcClasses: Map<QualifiedName, ClassApi>
 ) {
-
-    val apiInterfaceAccess = ClassAccess(
-        isFinal = metadata.fitToPublicApi,
-        variant = ClassVariant.Interface
-    )
-    val apiClassVisibility = ClassVisibility.Public
-
-    fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
-        isFinal = false,
-        variant = if (origIsInterface) ClassVariant.Interface else ClassVariant.AbstractClass
-    )
-
-
     fun abstractClass(outerClass: GeneratedClass?, destPath: Path?) {
         check(classApi.visibility == ClassVisibility.Public)
         createApiInterface(outerClass, destPath)
@@ -143,7 +160,7 @@ private data class ClassAbstractor(
 
         val classInfo = ClassInfo(
             visibility = apiClassVisibility,
-            access = apiInterfaceAccess,
+            access = apiInterfaceAccess(metadata),
             shortName = shortName.innermostClass(),
             typeArguments = allApiInterfaceTypeArguments(),
             superInterfaces = interfaces,
@@ -161,7 +178,7 @@ private data class ClassAbstractor(
         outerClass: GeneratedClass?,
         isInnerClassStatic: Boolean
     ) {
-        val codegen = if (metadata.writeRawAsm) AsmCodeGenerator else JavaCodeGenerator
+        val codegen = if (metadata.writeRawAsm) AsmCodeGenerator(index) else JavaCodeGenerator
         if (destPath != null) {
             codegen.writeClass(classInfo, packageName, destPath)
         } else {
@@ -198,29 +215,70 @@ private data class ClassAbstractor(
     private fun JavaClassType.satisfyingTypeBoundsIsImpossible() = type.packageName == EnumPackage
             && type.classNameSegments[0].name == EnumName
 
+    private fun getAllSuperMethods(): List<ClassApi.Method> = index.getSuperTypesRecursively(classApi.name)
+        .mapNotNull { mcClasses[it]?.methods }.flatten()
 
     private fun GeneratedClass.addBaseclassBody() {
-        passAsmInnerClasses(baseClass = true)
         for (method in classApi.methods) {
-            if (method.isConstructor && (method.isPublic || method.isProtected)) addBaseclassConstructor(method)
+            if ((method.isPublic || method.isProtected) && method.isConstructor) {
+               addBaseclassConstructor(method)
+//                else {
+//                    if(!method.isOverride(index,classApi)){
+//                        addBridgeMethod(method)
+//                        if (method.isProtected) {
+//                            //TODO: add normal protected methods
+//                        }
+//                    }
+//
+//                }
+            }
+        }
+
+        val methodsIncludingSupers = classApi.methods + getAllSuperMethods()
+        // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
+        // of the superclasses
+        for (method in methodsIncludingSupers.distinctBy { it.getJvmDescriptor() }) {
+            if (!method.isConstructor && !method.isStatic) {
+                if (method.isPublic || method.isProtected) {
+                    // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
+                    // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
+                    // it will be called in the api as well (without needing a bridge method)
+                    if (method.descriptorContainsMcClasses()){
+                        addBridgeMethod(method/*, delegateToApiInterface = false*/)
+                        //TODO: move the isoverride check into addApiDeclaredMethod
+
+                        // We need to add our own override to the method because we want the bridge method
+                        // to call the mc method (with a super call) by default.
+                        // If we don't add this method here to override the api method, it will call the method in the api interface,
+                        // which will call the bridge method - infinite recursion.
+                        /*if(!method.isOverride(index,classApi)) */addApiDeclaredMethod(method, callSuper = true)
+                    }
+
+
+//                    addBridgeMethod(method, delegateToApiInterface = method.isPublic)
+                }
+//                if (method.isProtected) {
+//                    //TODO: add normal protected methods
+//                    addBridgeMethod(method, delegateToApiInterface = false)
+//                }
+            }
         }
 
         for (innerClass in classApi.innerClasses) {
-            if (!innerClass.isPublic) continue
-            if (!innerClass.isFinal) copy(classApi = innerClass).createBaseclass(destPath = null, outerClass = this)
+            if (innerClass.isPublic && !innerClass.isFinal) {
+                copy(classApi = innerClass).createBaseclass(destPath = null, outerClass = this)
+            }
         }
     }
 
     private fun GeneratedClass.addApiInterfaceBody() {
-        passAsmInnerClasses(baseClass = false)
         for (method in classApi.methods) {
             if (method.isPublic) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
                 else {
                     // Don't duplicate methods that are just being overriden
-                    if (!method.isOverrideIgnoreReturnType(index, classApi)) {
-                        addApiInterfaceDeclaredMethod(method)
-                        addBridgeMethod(method)
+                    if (!method.isOverride(index, classApi)) {
+                        addApiDeclaredMethod(method, callSuper = false)
                     }
                 }
             }
@@ -242,46 +300,10 @@ private data class ClassAbstractor(
         addArrayFactory()
     }
 
-    private fun GeneratedClass.passAsmInnerClasses(baseClass: Boolean) {
-        // Resolving the inner classes on our own is quite difficult, so we will just pass what we get from parsing the original mc class
-        if (this is AsmGeneratedClass) {
-            with(metadata.versionPackage) {
-                val mcClasses =
-                    classApi.asmInnerClasses.map { it.access to it.name.toQualifiedName(dotQualified = false) }
-                        .filter { (_, name) -> name.isMcClassName() }
-                val apiClasses = mcClasses
-                    .map { (_, name) ->
-                        val qualifiedName = name.toApiClass()
-                        innerClassNode(qualifiedName, access = apiInterfaceAccess)
-                    }
+    private fun ClassApi.Method.descriptorContainsMcClasses() = returnType.isMcClass()
+            || parameters.values.any { it.isMcClass() }
 
-                val baseClasses = if (baseClass) {
-                    mcClasses.map { (access, name) ->
-                        val qualifiedName = name.toBaseClass()
-                        innerClassNode(
-                            qualifiedName,
-                            access = baseClassAccess(origIsInterface = access and Opcodes.ACC_INTERFACE != 0)
-                        )
-                    }
-                } else listOf()
-
-                addAsmInnerClasses(apiClasses + baseClasses + classApi.asmInnerClasses)
-            }
-        }
-    }
-
-    private fun innerClassNode(qualifiedName: QualifiedName, access: ClassAccess): InnerClassNode {
-        return InnerClassNode(
-            qualifiedName.toSlashQualifiedString(),
-            qualifiedName.copy(shortName = qualifiedName.shortName.outerClass())
-                .toSlashQualifiedString(),
-            qualifiedName.shortName.innermostClass(),
-            access.toAsmAccess(apiClassVisibility, isStatic = true)
-        )
-    }
-    //TODO: pull out the baseclass boolean and make it a whole new thing I think
-
-    private fun GeneratedClass.addBridgeMethod(method: ClassApi.Method) {
+    private fun GeneratedClass.addBridgeMethod(method: ClassApi.Method/*, delegateToApiInterface: Boolean*/) {
         // Bridges only exist for you to override methods
         if (method.isFinal || method.isStatic) return
         // Bridge methods are implementation details
@@ -289,7 +311,7 @@ private data class ClassAbstractor(
         // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
         // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
         // it will be called in the api as well (without needing a bridge method)
-        if (!method.returnType.isMcClass() && method.parameters.values.none { it.isMcClass() }) return
+//        if (!method.returnType.isMcClass() && method.parameters.values.none { it.isMcClass() }) return
 
         val mcReturnType = method.returnType
         val mcClassType = classApi.asRawType()
@@ -301,18 +323,21 @@ private data class ClassAbstractor(
                     type.remapToApiClass().toJvmType() to VariableExpression(name)
                 },
                 name = method.name,
-                methodAccess = method.access,
-                receiverAccess = classApi.access.copy(variant = ClassVariant.Interface),
-                returnType = mcReturnType.toJvmType(),
+
+                returnType = mcReturnType.remapToApiClass().toJvmType(),
                 // In a bridge method, call the api interface
                 // (so when mc calls it it will reach the api overrides)
-                owner = mcClassType.remapToApiClass().toJvmType()
+                //TODO: change based on delegateToApiInterface
+//                owner = mcClassType.remapToApiClass().toJvmType()
+                methodAccess = method.access,
+                receiverAccess = classApi.access/*.copy(variant = ClassVariant.Interface)*/,
+                owner = mcClassType.toJvmType()
             )
 
             if (!method.isVoid) {
                 @Suppress("UNCHECKED_CAST")
                 val returnedType = mcReturnType as AnyJavaType
-                val returnedValue =call.castFromApiToMc(returnedType)
+                val returnedValue = call.castFromApiToMc(returnedType)
                 addStatement(ReturnStatement(returnedValue))
             } else addStatement(call)
         }
@@ -320,7 +345,7 @@ private data class ClassAbstractor(
         addMethod(
             methodInfo,
             name = method.name,
-            isFinal = false,
+            isFinal = !classApi.isInterface,
             isStatic = method.isStatic,
             isAbstract = false,
             returnType = mcReturnType,
@@ -329,7 +354,7 @@ private data class ClassAbstractor(
     }
 
 
-    private fun GeneratedClass.addApiInterfaceDeclaredMethod(method: ClassApi.Method) {
+    private fun GeneratedClass.addApiDeclaredMethod(method: ClassApi.Method, callSuper: Boolean) {
 
         val mcReturnType = method.returnType
         val returnType = mcReturnType.remapToApiClass()
@@ -338,8 +363,11 @@ private data class ClassAbstractor(
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
             val call = MethodCall.Method(
-                receiver = if (method.isStatic) ClassReceiver(classApi.asJvmType())
-                else ThisExpression.castFromApiToMc(mcClassType),
+                receiver = when {
+                    method.isStatic -> ClassReceiver(classApi.asJvmType())
+                    callSuper -> SuperReceiver
+                    else -> ThisExpression.castFromApiToMc(mcClassType)
+                },
                 parameters = apiPassedParameters(method),
                 name = method.name,
                 methodAccess = method.access,
@@ -426,7 +454,7 @@ private data class ClassAbstractor(
     ) = MethodInfo(
         visibility = visibility,
         throws = throws.map { it.remapToApiClass() },
-        parameters = if (remapParameters) parameters else apiParametersDeclaration(this),
+        parameters = if (remapParameters) apiParametersDeclaration(this) else parameters,
         body = body
     )
 
@@ -610,6 +638,8 @@ private data class ClassAbstractor(
 
     private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
         with(metadata.versionPackage) { remapToApiClass() }
+    private fun <T : GenericReturnType> JavaType<T>.remapToBaseClass(): JavaType<T> =
+        with(metadata.versionPackage) { remapToBaseClass() }
 
     private fun <T : GenericReturnType> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }

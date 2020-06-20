@@ -19,7 +19,7 @@ public class TestConcreteClass extends TestSuperClass {
         privateField = 7;
     }
 
-    public int publicInt() {
+    public int publicInt(TestOtherClass x) {
         return 2;
     }
 

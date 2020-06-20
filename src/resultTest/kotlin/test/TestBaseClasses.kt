@@ -1,11 +1,26 @@
 package test
 
-import net.minecraft.TestAbstractClass
+import net.minecraft.TestAbstractImpl
+import net.minecraft.TestConcreteClass
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
+class X : BaseTestAbstractImpl(0,null) {
+
+}
+
+@Suppress("CAST_NEVER_SUCCEEDS")
 class TestBaseClasses {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
+
+//    public abstract class TestAbstractClass {
+//    public int field;
+//
+//    public abstract TestAbstractClass abstractMethod();
+//    public abstract TestAbstractClass abstractMethodParam(TestConcreteClass x);
+//
+//    public TestAbstractClass(int x1, TestAbstractClass x2){}
+//}
 
 //public class TestAbstractImpl extends TestAbstractClass implements TestInterface, Comparable<TestAbstractImpl> {
 //    public TestAbstractImpl(int x1, TestAbstractClass x2) {
@@ -33,24 +48,53 @@ class TestBaseClasses {
 //    }
 //}
 
-    class X : ITestAbstractImpl
+//    class X : ITestAbstractImpl
+
+
+    //TODO: there is indeed infinite recursion when it's not being overriden
 
     @Test
     fun testAbstractImpl() {
         println("Running testAbstractImpl baseclass test")
-        val x = object : ITestAbstractImpl{}
-        with(object : BaseTestAbstractImpl(0, ITestAbstractImpl.create(0,null)) {
 
+        with(object : BaseTestAbstractImpl(0, ITestAbstractImpl.create(0, null)) {
         }) {
-//            assert(abstractMethod() is ITestAbstractClass)
-//            assert(abstractMethodParam(ITestConcreteClass.create(0, null)) is ITestAbstractClass)
-//            assertEquals(field, 0)
-//            field = 2
-//            assertEquals(field, 2)
-//            assertEquals(foo(), null)
-//            assertEquals(bar(), 2)
-//            assertEquals(compareTo(ITestAbstractImpl.create(0, null)), 0)
+            abstractMethod()
         }
+
+        val expectedObj1 = ITestAbstractImpl.create(0, null)
+        val expectedObj2 = ITestAbstractImpl.create(0, null)
+
+        with(object : BaseTestAbstractImpl(0, ITestAbstractImpl.create(0, null)) {
+            override fun abstractMethod(): ITestAbstractClass {
+                return expectedObj1
+            }
+
+            override fun abstractMethodParam(p0: ITestConcreteClass): ITestAbstractClass? {
+                return expectedObj2
+            }
+        }) {
+            testAbstractImplCalls()
+        }
+
+        val expectedParam = TestConcreteClass()
+
+        with(object : BaseTestAbstractImpl(0, ITestAbstractImpl.create(0, null)) {
+            override fun abstractMethod(): ITestAbstractClass {
+                return expectedObj1
+            }
+
+            override fun abstractMethodParam(p0: ITestConcreteClass): ITestAbstractClass? {
+                assertEquals(p0, expectedParam)
+                return expectedObj2
+            }
+        }) {
+            val mcThis = this as TestAbstractImpl
+            assertEquals(expectedObj1, mcThis.abstractMethod())
+            assertEquals(expectedObj2, mcThis.abstractMethodParam(expectedParam))
+        }
+
+
     }
 
     @Test
@@ -69,51 +113,19 @@ class TestBaseClasses {
 
     @Test
     fun testConcreteClass() {
-
-        assert(ITestConcreteClass.publicStaticOtherClassField is ITestOtherClass)
-        assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
-        assertEquals(ITestConcreteClass.publicStatic(), 4)
-        assert(ITestConcreteClass.create(1, ITestOtherClass.create()) is ITestConcreteClass)
-        assertEquals(ITestConcreteClass.getPublicStaticField(), null)
-        ITestConcreteClass.setPublicStaticField("foo")
-        assertEquals(ITestConcreteClass.getPublicStaticField(), "foo")
-        assertEquals(ITestConcreteClass.TestInnerClass.publicStaticFinalField, "BAR")
-        assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStaticFinalField, "BAR")
-
-        assert(ITestConcreteClass.TestStaticInnerClass.publicStaticOtherClassField is ITestOtherClass?)
-        assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStatic(), 4)
-
-        with(ITestConcreteClass.create(0, ITestOtherClass.create())) {
-            assertEquals(publicInt(), 2)
-            assertEquals(mutatesField(), 123)
-            assertEquals(finalMethod(), 3)
-            assert(innerClassMethod() is ITestConcreteClass.TestStaticInnerClass)
-            assertEquals(publicField, 0)
-            publicField = 3
-            assertEquals(publicField, 3)
-            assertEquals(publicFinalField, 2)
-            val otherClassFieldVar = otherClassField
-            assert(otherClassFieldVar is ITestOtherClass)
-            otherClassField = ITestOtherClass.create()
-            assert(otherClassField !== otherClassFieldVar)
+        with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
+            override fun publicInt(p0: ITestOtherClass?): Int {
+                return 3
+            }
+        }) {
+            testConcreteClassCalls()
+            val mcThis = this as TestConcreteClass
+            assertEquals(mcThis.publicInt(null), 3)
         }
 
-        with(ITestConcreteClass.create(0, ITestOtherClass.create()).newTestInnerClass(123, ITestOtherClass.create())) {
-            assertEquals(publicInt(), 2)
-            assertEquals(publicField, 0)
-            assertEquals(mutatesField(), 123)
-            assertEquals(publicField, 1)
-            assertEquals(finalMethod(), 3)
-            publicField = 69
-            assertEquals(publicField, 69)
-            assertEquals(publicFinalField, 2)
-            val otherClassFieldVar = otherClassField
-            assert(otherClassFieldVar is ITestOtherClass)
-            otherClassField = ITestOtherClass.create()
-            assert(otherClassField !== otherClassFieldVar)
-        }
+        with(object : BaseTestConcreteClass.TestStaticInnerClass(1, ITestOtherClass.create()) {
 
-        with(ITestConcreteClass.TestStaticInnerClass.create(1, ITestOtherClass.create())) {
+        }) {
             assertEquals(publicInt(), 2)
         }
 

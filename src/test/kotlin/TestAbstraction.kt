@@ -28,8 +28,7 @@ class TestAbstraction {
     )
 
     private val noBase = listOf(
-        "ExtendedInterface", "ExtendedInterfaceRaw", "TestEnum", "TestFinalClass",
-        "TestOverrideReturnTypeChange", "TestOverrideReturnTypeChangeSuper", "TestGenerics"
+       "TestEnum", "TestFinalClass"
     )
 
     @Test

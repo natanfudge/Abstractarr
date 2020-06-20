@@ -40,4 +40,14 @@ public class TestAnnotations extends TestAbstractClass {
 
     @Nullable
     public static final String finalStaticField = "bar";
+
+    @Override
+    public TestInterface foo() {
+        return null;
+    }
+
+    @Override
+    public TestOtherClass boz(TestOtherClass x) {
+        return null;
+    }
 }

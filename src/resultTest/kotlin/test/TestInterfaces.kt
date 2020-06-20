@@ -3,24 +3,51 @@ package test
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
+ fun ITestAbstractImpl.testAbstractImplCalls() {
+    assert(abstractMethod() is ITestAbstractClass)
+    assert(abstractMethodParam(ITestConcreteClass.create(0, null)) is ITestAbstractClass)
+    assertEquals(field, 0)
+    field = 2
+    assertEquals(field, 2)
+    assertEquals(foo(), null)
+    assertEquals(bar(), 2)
+    assertEquals(compareTo(ITestAbstractImpl.create(0, null)), 0)
+}
+
+ fun ITestConcreteClass.testConcreteClassCalls() {
+    assertEquals(publicInt(null), 2)
+    assertEquals(mutatesField(), 123)
+    assertEquals(finalMethod(), 3)
+
+    //TODO: investigate why inner classes are not getting the interface
+    //TODO: base classes look like infinite recursion, need to use some super shit?
+    val value = innerClassMethod()
+    assert(innerClassMethod() is ITestConcreteClass.TestStaticInnerClass)
+    assertEquals(publicField, 0)
+    publicField = 3
+    assertEquals(publicField, 3)
+    assertEquals(publicFinalField, 2)
+    val otherClassFieldVar = otherClassField
+    assert(otherClassFieldVar is ITestOtherClass)
+    otherClassField = ITestOtherClass.create()
+    assert(otherClassField !== otherClassFieldVar)
+}
+
+ fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
+
+
 @Suppress("USELESS_IS_CHECK", "UNUSED_VARIABLE")
 class TestInterfaces {
-    private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
     @Test
     fun testAbstractImpl() {
         println("Running testAbstractImpl test")
         with(ITestAbstractImpl.create(0, null)) {
-            assert(abstractMethod() is ITestAbstractClass)
-            assert(abstractMethodParam(ITestConcreteClass.create(0, null)) is ITestAbstractClass)
-            assertEquals(field, 0)
-            field = 2
-            assertEquals(field, 2)
-            assertEquals(foo(), null)
-            assertEquals(bar(), 2)
-            assertEquals(compareTo(ITestAbstractImpl.create(0, null)), 0)
+            testAbstractImplCalls()
         }
     }
+
+
 
     @Test
     fun testClashingNames() {
@@ -53,22 +80,7 @@ class TestInterfaces {
         assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStatic(), 4)
 
         with(ITestConcreteClass.create(0, ITestOtherClass.create())) {
-            assertEquals(publicInt(), 2)
-            assertEquals(mutatesField(), 123)
-            assertEquals(finalMethod(), 3)
-
-            //TODO: investigate why inner classes are not getting the interface
-            //TODO: base classes look like infinite recursion, need to use some super shit?
-            val value = innerClassMethod()
-            assert(innerClassMethod() is ITestConcreteClass.TestStaticInnerClass)
-            assertEquals(publicField, 0)
-            publicField = 3
-            assertEquals(publicField, 3)
-            assertEquals(publicFinalField, 2)
-            val otherClassFieldVar = otherClassField
-            assert(otherClassFieldVar is ITestOtherClass)
-            otherClassField = ITestOtherClass.create()
-            assert(otherClassField !== otherClassFieldVar)
+            testConcreteClassCalls()
         }
 
         with(ITestConcreteClass.create(0, ITestOtherClass.create()).newTestInnerClass(123, ITestOtherClass.create())) {
@@ -91,6 +103,8 @@ class TestInterfaces {
         }
 
     }
+
+
 
 
     @Test
@@ -136,29 +150,29 @@ class TestInterfaces {
         }
     }
 
-//    @Test
-//    fun testOverrideReturnTypeChange() {
-//        with(ITestOverrideReturnTypeChange.create()) {
-//            val x: List<*>? = foo()
-//            assertEquals(x, null)
-//            val y: ArrayList<ITestOtherClass>? = bar()
-//            assertEquals(y, null)
-//            val z: ITestAbstractImpl? = mcClass()
-//            assertEquals(z, null)
-//        }
-//    }
-//
-//    @Test
-//    fun testOverrideReturnTypeChangeSuper() {
-//        with(ITestOverrideReturnTypeChangeSuper.create()) {
-//            val x: Any? = foo()
-//            assertEquals(x, null)
-//            val y: List<ITestOtherClass>? = bar()
-//            assertEquals(y, null)
-//            val z: ITestAbstractClass? = mcClass()
-//            assertEquals(z, null)
-//        }
-//    }
+    @Test
+    fun testOverrideReturnTypeChange() {
+        with(ITestOverrideReturnTypeChange.create()) {
+            val x: List<*>? = foo()
+            assertEquals(x, null)
+            val y: ArrayList<ITestOtherClass>? = bar()
+            assertEquals(y, null)
+            val z: ITestAbstractImpl? = mcClass()
+            assertEquals(z, null)
+        }
+    }
+
+    @Test
+    fun testOverrideReturnTypeChangeSuper() {
+        with(ITestOverrideReturnTypeChangeSuper.create()) {
+            val x: Any? = foo()
+            assertEquals(x, null)
+            val y: List<ITestOtherClass>? = bar()
+            assertEquals(y, null)
+            val z: ITestAbstractClass? = mcClass()
+            assertEquals(z, null)
+        }
+    }
 
     @Test
     fun testArrays() {
