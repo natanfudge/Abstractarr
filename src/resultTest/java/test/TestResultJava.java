@@ -11,13 +11,6 @@ public class TestResultJava {
 
     private static <T> void assertEquals(T actual, T expected) {
         org.junit.jupiter.api.Assertions.assertEquals(expected, actual);
-
-        ITestConcreteClass x = new BaseTestConcreteClass() {
-            @Override
-            public int publicInt(ITestOtherClass iTestOtherClass) {
-                return 3;
-            }
-        };
     }
 
     @Test
@@ -36,7 +29,7 @@ public class TestResultJava {
     }
 
     @Test
-    void test(){
+    void testOverrideExample() {
         TestConcreteClass expectedParam = new TestConcreteClass();
         BaseTestAbstractImpl x = new BaseTestAbstractImpl(0, ITestAbstractImpl.create(0, null)) {
 
@@ -48,11 +41,6 @@ public class TestResultJava {
         };
         TestAbstractImpl mcThis = (TestAbstractImpl)(Object)x;
         mcThis.abstractMethodParam(expectedParam);
-
-
-//            assertEquals(expectedObj1, mcThis.abstractMethod())
-//            assertEquals(expectedObj2, mcThis.abstractMethodParam(expectedParam))
-
     }
 
 }

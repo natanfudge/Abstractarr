@@ -1,5 +1,5 @@
 package net.minecraft;
 
-public interface ExtendedInterface<T  extends TestInterface> {
+public interface ExtendedInterface<T extends TestInterface> {
 
 }
