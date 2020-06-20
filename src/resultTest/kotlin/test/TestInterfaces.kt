@@ -66,7 +66,7 @@ class TestInterfaces {
     @Test
     fun testConcreteClass() {
 
-        assert(ITestConcreteClass.publicStaticOtherClassField is ITestOtherClass)
+        ITestConcreteClass.publicStaticOtherClassField
         assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
         assertEquals(ITestConcreteClass.publicStatic(), 4)
         assert(ITestConcreteClass.create(1, ITestOtherClass.create()) is ITestConcreteClass)
