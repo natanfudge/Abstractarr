@@ -3,7 +3,7 @@ package test
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
- fun ITestAbstractImpl.testAbstractImplCalls() {
+fun ITestAbstractImpl.testAbstractImplCalls() {
     assert(abstractMethod() is ITestAbstractClass)
     assert(abstractMethodParam(ITestConcreteClass.create(0, null)) is ITestAbstractClass)
     assertEquals(field, 0)
@@ -14,13 +14,11 @@ import v1.net.minecraft.*
     assertEquals(compareTo(ITestAbstractImpl.create(0, null)), 0)
 }
 
- fun ITestConcreteClass.testConcreteClassCalls() {
+fun ITestConcreteClass.testConcreteClassCalls() {
     assertEquals(publicInt(null), 2)
     assertEquals(mutatesField(), 123)
     assertEquals(finalMethod(), 3)
 
-    //TODO: investigate why inner classes are not getting the interface
-    //TODO: base classes look like infinite recursion, need to use some super shit?
     val value = innerClassMethod()
     assert(innerClassMethod() is ITestConcreteClass.TestStaticInnerClass)
     assertEquals(publicField, 0)
@@ -44,7 +42,7 @@ fun ITestClashingNames.testClashingNamesCalls() {
     assertEquals(getSomeInt(3), 0)
 }
 
- fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
+fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
 
 @Suppress("USELESS_IS_CHECK", "UNUSED_VARIABLE")
@@ -58,6 +56,43 @@ class TestInterfaces {
         }
     }
 
+    @Test
+    fun testAnnotations() {
+        with(ITestAnnotations.create()) {
+            val x: ITestAbstractClass? = abstractMethod()
+            val y = foo(2, "foo")
+//            val y = foo(2, null)
+            val z = nullable()
+//            z.length
+            val a = instanceField
+//            a.length
+        }
+    }
+
+    @Test
+    fun testArrays() {
+        with(ITestArrays.create()) {
+            assertEquals(arrField, null)
+            arrField = ITestConcreteClass.array(5)
+            arrField[2] = ITestConcreteClass.create()
+            arrField[3] = ITestConcreteClass.create()
+
+            val x: ITestConcreteClass = arrField[2]
+            val y: ITestConcreteClass = arrField[3]
+
+            assert(x is ITestConcreteClass)
+            assert(y is ITestConcreteClass)
+            assertEquals(arrField[1], null)
+
+            val arrFromMethod = arrMethod()
+            assert(arrFromMethod[1] is ITestConcreteClass)
+            arrFromMethod[0] = ITestConcreteClass.create()
+
+            arrParam(arrField)
+            arrParam(arrFromMethod)
+            arrParam(arrMethod())
+        }
+    }
 
 
     @Test
@@ -66,7 +101,6 @@ class TestInterfaces {
             testClashingNamesCalls()
         }
     }
-
 
 
     @Test
@@ -109,8 +143,6 @@ class TestInterfaces {
         }
 
     }
-
-
 
 
     @Test
@@ -180,33 +212,10 @@ class TestInterfaces {
         }
     }
 
-    @Test
-    fun testArrays() {
-        with(ITestArrays.create()) {
-            assertEquals(arrField, null)
-            arrField = ITestConcreteClass.array(5)
-            arrField[2] = ITestConcreteClass.create()
-            arrField[3] = ITestConcreteClass.create()
 
-            val x: ITestConcreteClass = arrField[2]
-            val y: ITestConcreteClass = arrField[3]
-
-            assert(x is ITestConcreteClass)
-            assert(y is ITestConcreteClass)
-            assertEquals(arrField[1], null)
-
-            val arrFromMethod = arrMethod()
-            assert(arrFromMethod[1] is ITestConcreteClass)
-            arrFromMethod[0] = ITestConcreteClass.create()
-
-            arrParam(arrField)
-            arrParam(arrFromMethod)
-            arrParam(arrMethod())
-        }
-    }
 
     @Test
-    fun testEnum(){
+    fun testEnum() {
         assertEquals(ITestEnum.foo(), ITestEnum.THING2)
         with(ITestEnum.THING) {
             assertEquals(bar(), null)
@@ -215,12 +224,12 @@ class TestInterfaces {
             assertEquals(x, 3)
         }
 
-        with(ITestEnum.THING2 as Enum<*>){
+        with(ITestEnum.THING2 as Enum<*>) {
             assertEquals(name, "THING2")
             assertEquals(ordinal, 1)
         }
 
-        with(ITestEnum.values()){
+        with(ITestEnum.values()) {
             assertEquals(size, 2)
             assertEquals(this[0], ITestEnum.THING)
             assertEquals(this[1], ITestEnum.THING2)
@@ -233,17 +242,19 @@ class TestInterfaces {
     fun testGenerics() {
         ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
                 List<ArrayList<ITestConcreteClass>>, Int>()
-        with(ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                List<ArrayList<ITestConcreteClass>>, Int>()){
-           val x : ITestInterface = ITestAbstractImpl.create(0, null)
-            val y : ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
+        with(
+            ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
+                    List<ArrayList<ITestConcreteClass>>, Int>()
+        ) {
+            val x: ITestInterface = ITestAbstractImpl.create(0, null)
+            val y: ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
                 ArrayList(),
                 ArrayList(),
                 listOf(),
                 listOf(),
                 listOf(ITestAbstractImpl.create(0, null)),
                 mutableListOf(x),
-                listOf(1,2,"3")
+                listOf(1, 2, "3")
             )
 
             genericField1 = ArrayList()
@@ -257,7 +268,7 @@ class TestInterfaces {
 
 
         ITestGenerics.SomeInnerClass.array<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                List<ArrayList<ITestConcreteClass>>, Int,Int>(5)
+                List<ArrayList<ITestConcreteClass>>, Int, Int>(5)
     }
 
 

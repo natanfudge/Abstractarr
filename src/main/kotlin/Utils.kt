@@ -1,5 +1,6 @@
 import api.*
-import signature.*
+import metautils.signature.ArrayGenericType
+import metautils.signature.ClassGenericType
 import util.*
 
 

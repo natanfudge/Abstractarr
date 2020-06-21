@@ -1,7 +1,6 @@
 import abstractor.VersionPackage
 import abstractor.isMcClass
 import api.*
-import arrow.optics.optics
 import codegeneration.*
 import codegeneration.asm.AsmCodeGenerator
 import codegeneration.asm.toAsmAccess
@@ -9,6 +8,8 @@ import descriptor.JvmPrimitiveType
 import descriptor.JvmType
 import descriptor.ObjectType
 import descriptor.ReturnDescriptor
+import metautils.api.readFromJar
+import metautils.signature.*
 import signature.*
 import util.*
 import java.nio.file.Path
@@ -600,7 +601,7 @@ private data class ClassAbstractor(
 
     internal fun allApiInterfaceTypeArguments(): List<TypeArgumentDeclaration> = when {
         classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
-        else -> classApi.listInnerClassChain().flatMap { it.typeArguments.remapDeclToApiClasses() }
+        else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
     }
 
     private fun baseClassTypeArguments(): List<TypeArgumentDeclaration> {

@@ -1,4 +1,5 @@
 import asm.readToClassNode
+import metautils.signature.*
 import org.junit.jupiter.api.Test
 import signature.*
 import testing.getResource
@@ -9,7 +10,7 @@ class TestSignatureParsing {
     @Test
     fun testSignatures() {
         val classNode = readToClassNode(getResource("GenericsTest.class"))
-        val classSignature = ClassSignature.readFrom(classNode.signature)
+        val classSignature = ClassSignature.readFrom(classNode.signature, mapOf())
         testClass(classSignature, classNode.signature)
 
         val classTypeArgMap = classSignature.typeArguments?.map { it.name to it }?.toMap() ?: mapOf()
@@ -29,7 +30,7 @@ class TestSignatureParsing {
 
     private fun testClass(classSignature: ClassSignature, signature: String) {
         val asString = classSignature.toClassfileName()
-        val backToClass = ClassSignature.readFrom(asString)
+        val backToClass = ClassSignature.readFrom(asString, mapOf())
         val asStringAgain = backToClass.toClassfileName()
 
         assertEquals(classSignature, backToClass)

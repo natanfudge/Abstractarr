@@ -7,6 +7,7 @@ import util.includeIf
 
 interface Signature
 
+//@optic
 data class ClassSignature(
     val typeArguments: List<TypeArgumentDeclaration>?,
     val superClass: ClassGenericType,
