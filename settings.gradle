@@ -1,6 +1,6 @@
 rootProject.name = 'Abstractarr'
 
-def utils = file("src/metautils")
+def utils = file("src/main/kotlin/metautils")
 if (!utils.exists() || utils.list().length == 0) {
     throw new RuntimeException("MetaUtils directory is missing or empty. Make sure you use --recurse-submodules in git clone!")
 }
