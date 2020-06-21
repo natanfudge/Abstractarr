@@ -1,4 +1,4 @@
-[submodule "src/metaUtils"]
-	path = src/metaUtils
+[submodule "src/main/kotlin/metautils"]
+	path = src/main/kotlin/metautils
 	url = https://github.com/IntransientMC/MetaUtils
 	branch = master

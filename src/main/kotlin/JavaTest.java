@@ -1,8 +1,5 @@
-import org.jetbrains.annotations.Nullable;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Target;
-import java.util.ArrayList;
 
 //public class JavaTest extends ArrayList<?> {
 //    public static IOrig[] array(int size) {

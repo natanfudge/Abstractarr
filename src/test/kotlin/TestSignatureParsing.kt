@@ -8,24 +8,26 @@ import kotlin.test.assertEquals
 class TestSignatureParsing {
     @Test
     fun testSignatures() {
-        val classNode = readToClassNode(getResource("GenericsTest.fuckresources"))
+        val classNode = readToClassNode(getResource("GenericsTest.class"))
         val classSignature = ClassSignature.readFrom(classNode.signature)
         testClass(classSignature, classNode.signature)
 
+        val classTypeArgMap = classSignature.typeArguments?.map { it.name to it }?.toMap() ?: mapOf()
+
         val method1Sig = classNode.methods[1].signature
         val method2Sig = classNode.methods[2].signature
-        val method1Signature = MethodSignature.readFrom(method1Sig)
-        val method2Signature = MethodSignature.readFrom(method2Sig)
+        val method1Signature = MethodSignature.readFrom(method1Sig, classTypeArgMap)
+        val method2Signature = MethodSignature.readFrom(method2Sig, classTypeArgMap)
 
-        testMethod(method1Signature,method1Sig)
-        testMethod(method2Signature,method2Sig)
+        testMethod(method1Signature, method1Sig, classTypeArgMap)
+        testMethod(method2Signature, method2Sig, classTypeArgMap)
 
-        val field1Signature = FieldSignature.readFrom(classNode.fields[0].signature)
-        val field2Signature = FieldSignature.readFrom(classNode.fields[1].signature)
+        val field1Signature = FieldSignature.readFrom(classNode.fields[0].signature, classTypeArgMap)
+        val field2Signature = FieldSignature.readFrom(classNode.fields[1].signature, classTypeArgMap)
         val x = 2
     }
 
-    private fun testClass(classSignature: ClassSignature, signature : String) {
+    private fun testClass(classSignature: ClassSignature, signature: String) {
         val asString = classSignature.toClassfileName()
         val backToClass = ClassSignature.readFrom(asString)
         val asStringAgain = backToClass.toClassfileName()
@@ -36,9 +38,9 @@ class TestSignatureParsing {
     }
 
 
-    private fun testMethod(methodSignature: MethodSignature, signature : String) {
+    private fun testMethod(methodSignature: MethodSignature, signature: String, args: TypeArgDecls) {
         val asString = methodSignature.toClassfileName()
-        val backToClass = MethodSignature.readFrom(asString)
+        val backToClass = MethodSignature.readFrom(asString, args)
         val asStringAgain = backToClass.toClassfileName()
 
         assertEquals(methodSignature, backToClass)

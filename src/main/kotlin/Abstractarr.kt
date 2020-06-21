@@ -1,6 +1,7 @@
 import abstractor.VersionPackage
 import abstractor.isMcClass
 import api.*
+import arrow.optics.optics
 import codegeneration.*
 import codegeneration.asm.AsmCodeGenerator
 import codegeneration.asm.toAsmAccess
@@ -11,6 +12,8 @@ import descriptor.ReturnDescriptor
 import signature.*
 import util.*
 import java.nio.file.Path
+
+
 
 
 data class AbstractionMetadata(
@@ -221,29 +224,20 @@ private data class ClassAbstractor(
     private fun GeneratedClass.addBaseclassBody() {
         for (method in classApi.methods) {
             if ((method.isPublic || method.isProtected) && method.isConstructor) {
-               addBaseclassConstructor(method)
-//                else {
-//                    if(!method.isOverride(index,classApi)){
-//                        addBridgeMethod(method)
-//                        if (method.isProtected) {
-//                            //TODO: add normal protected methods
-//                        }
-//                    }
-//
-//                }
+                addBaseclassConstructor(method)
             }
         }
 
         val methodsIncludingSupers = classApi.methods + getAllSuperMethods()
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
-        for (method in methodsIncludingSupers.distinctBy { it.getJvmDescriptor() }) {
+        for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
             if (!method.isConstructor && !method.isStatic) {
                 if (method.isPublic || method.isProtected) {
                     // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
                     // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
                     // it will be called in the api as well (without needing a bridge method)
-                    if (method.descriptorContainsMcClasses()){
+                    if (method.descriptorContainsMcClasses()) {
                         addBridgeMethod(method/*, delegateToApiInterface = false*/)
                         //TODO: move the isoverride check into addApiDeclaredMethod
 
@@ -251,16 +245,9 @@ private data class ClassAbstractor(
                         // to call the mc method (with a super call) by default.
                         // If we don't add this method here to override the api method, it will call the method in the api interface,
                         // which will call the bridge method - infinite recursion.
-                        /*if(!method.isOverride(index,classApi)) */addApiDeclaredMethod(method, callSuper = true)
+                        addApiDeclaredMethod(method, callSuper = true)
                     }
-
-
-//                    addBridgeMethod(method, delegateToApiInterface = method.isPublic)
                 }
-//                if (method.isProtected) {
-//                    //TODO: add normal protected methods
-//                    addBridgeMethod(method, delegateToApiInterface = false)
-//                }
             }
         }
 
@@ -638,6 +625,7 @@ private data class ClassAbstractor(
 
     private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
         with(metadata.versionPackage) { remapToApiClass() }
+
     private fun <T : GenericReturnType> JavaType<T>.remapToBaseClass(): JavaType<T> =
         with(metadata.versionPackage) { remapToBaseClass() }
 

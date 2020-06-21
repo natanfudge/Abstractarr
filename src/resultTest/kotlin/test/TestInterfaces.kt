@@ -33,6 +33,17 @@ import v1.net.minecraft.*
     assert(otherClassField !== otherClassFieldVar)
 }
 
+fun ITestClashingNames.testClashingNamesCalls() {
+    assertEquals(isSomeBool_field, false)
+    isSomeBool = true
+    assertEquals(isSomeBool_field, true)
+    assertEquals(isSomeBool, false)
+    assertEquals(someInt, 0)
+    someInt = 2
+    assertEquals(someInt, 2)
+    assertEquals(getSomeInt(3), 0)
+}
+
  fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
 
@@ -52,16 +63,11 @@ class TestInterfaces {
     @Test
     fun testClashingNames() {
         with(ITestClashingNames.create()) {
-            assertEquals(isSomeBool_field, false)
-            isSomeBool = true
-            assertEquals(isSomeBool_field, true)
-            assertEquals(isSomeBool, false)
-            assertEquals(someInt, 0)
-            someInt = 2
-            assertEquals(someInt, 2)
-            assertEquals(getSomeInt(3), 0)
+            testClashingNamesCalls()
         }
     }
+
+
 
     @Test
     fun testConcreteClass() {
@@ -230,21 +236,21 @@ class TestInterfaces {
         with(ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
                 List<ArrayList<ITestConcreteClass>>, Int>()){
            val x : ITestInterface = ITestAbstractImpl.create(0, null)
-//            val y : ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
-//                ArrayList(),
-//                ArrayList(),
-//                listOf(),
-//                listOf(),
-//                listOf(ITestAbstractImpl.create(0, null)),
-//                mutableListOf(x),
-//                listOf(1,2,"3")
-//            )
-//
-//            genericField1 = ArrayList()
-//            genericField1.add(ITestConcreteClass.create())
-//            assert(genericField1[0] is ITestConcreteClass)
-//
-//            newSomeInnerClass<Int>()
+            val y : ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
+                ArrayList(),
+                ArrayList(),
+                listOf(),
+                listOf(),
+                listOf(ITestAbstractImpl.create(0, null)),
+                mutableListOf(x),
+                listOf(1,2,"3")
+            )
+
+            genericField1 = ArrayList()
+            genericField1.add(ITestConcreteClass.create())
+            assert(genericField1[0] is ITestConcreteClass)
+
+            newSomeInnerClass<Int>()
         }
 
         ITestGenerics.Extendor.create<ArrayList<ITestConcreteClass>>()
@@ -253,5 +259,6 @@ class TestInterfaces {
         ITestGenerics.SomeInnerClass.array<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
                 List<ArrayList<ITestConcreteClass>>, Int,Int>(5)
     }
+
 
 }

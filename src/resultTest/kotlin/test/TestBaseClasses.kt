@@ -5,53 +5,11 @@ import net.minecraft.TestConcreteClass
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
-class X : BaseTestAbstractImpl(0,null) {
-
-}
 
 @Suppress("CAST_NEVER_SUCCEEDS")
 class TestBaseClasses {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
-//    public abstract class TestAbstractClass {
-//    public int field;
-//
-//    public abstract TestAbstractClass abstractMethod();
-//    public abstract TestAbstractClass abstractMethodParam(TestConcreteClass x);
-//
-//    public TestAbstractClass(int x1, TestAbstractClass x2){}
-//}
-
-//public class TestAbstractImpl extends TestAbstractClass implements TestInterface, Comparable<TestAbstractImpl> {
-//    public TestAbstractImpl(int x1, TestAbstractClass x2) {
-//        super(x1, x2);
-//    }
-//
-//    public TestAbstractClass abstractMethod() {
-//        return new TestAbstractImpl(1, (TestAbstractClass)null);
-//    }
-//
-//    public TestAbstractClass abstractMethodParam(TestConcreteClass x) {
-//        return new TestAbstractImpl(2, new TestAbstractImpl(3, (TestAbstractClass)null));
-//    }
-//
-//    public TestInterface foo() {
-//        return null;
-//    }
-//
-//    public TestOtherClass boz(TestOtherClass x) {
-//        return null;
-//    }
-//
-//    public int compareTo(TestAbstractImpl o) {
-//        return 0;
-//    }
-//}
-
-//    class X : ITestAbstractImpl
-
-
-    //TODO: there is indeed infinite recursion when it's not being overriden
 
     @Test
     fun testAbstractImpl() {
@@ -77,7 +35,14 @@ class TestBaseClasses {
             testAbstractImplCalls()
         }
 
-        val expectedParam = TestConcreteClass()
+        val ep1 = TestConcreteClass()
+        val ep2 = ITestOtherClass.create()
+
+        val e3 = ITestAbstractImpl.create(0,null)
+        val e4 = ITestOtherClass.create()
+        val e5 = ITestOtherClass.create()
+        val e6 = ITestOtherClass.create()
+        val ep3 = ITestOtherClass.create()
 
         with(object : BaseTestAbstractImpl(0, ITestAbstractImpl.create(0, null)) {
             override fun abstractMethod(): ITestAbstractClass {
@@ -85,29 +50,57 @@ class TestBaseClasses {
             }
 
             override fun abstractMethodParam(p0: ITestConcreteClass): ITestAbstractClass? {
-                assertEquals(p0, expectedParam)
+                assertEquals(p0, ep1)
                 return expectedObj2
             }
+
+            override fun foo(): ITestInterface {
+                return e3
+            }
+
+            override fun baz(): ITestOtherClass {
+                return e4
+            }
+
+            override fun baz(p0: ITestOtherClass?): ITestOtherClass {
+                assertEquals(ep2, p0)
+                return e5
+            }
+
+            override fun boz(p0: ITestOtherClass?): ITestOtherClass {
+                return e6
+            }
+
+            override fun someImplMethodWithArg(p0: ITestOtherClass?) {
+                assertEquals(p0,ep3)
+                super.someImplMethodWithArg(p0)
+            }
+
+            override fun compareTo(other: ITestAbstractImpl?): Int {
+                return 4
+            }
         }) {
-            val mcThis = this as TestAbstractImpl
-            assertEquals(expectedObj1, mcThis.abstractMethod())
-            assertEquals(expectedObj2, mcThis.abstractMethodParam(expectedParam))
+            this as TestAbstractImpl
+            assertEquals(expectedObj1, abstractMethod())
+            assertEquals(expectedObj2, abstractMethodParam(ep1))
+            assertEquals(e3,foo())
+            assertEquals(e4,baz())
+            assertEquals(e5,baz(ep2))
+            assertEquals(e6,boz(ep2))
+            someImplMethodWithArg(ep3)
+            assertEquals(compareTo(ITestAbstractImpl.create(0,null)), 4)
         }
-
-
     }
 
     @Test
     fun testClashingNames() {
-        with(ITestClashingNames.create()) {
-            assertEquals(isSomeBool_field, false)
-            isSomeBool = true
-            assertEquals(isSomeBool_field, true)
-            assertEquals(isSomeBool, false)
-            assertEquals(someInt, 0)
-            someInt = 2
-            assertEquals(someInt, 2)
-            assertEquals(getSomeInt(3), 0)
+        object: BaseTestClashingNames() {
+        }.testClashingNamesCalls()
+
+        with(object: BaseTestClashingNames(){
+
+        }){
+
         }
     }
 
