@@ -5,6 +5,7 @@ import net.minecraft.TestConcreteClass;
 import org.junit.jupiter.api.Test;
 import v1.net.minecraft.*;
 
+import java.io.IOException;
 import java.util.ArrayList;
 
 public class TestResultJava {
@@ -41,6 +42,16 @@ public class TestResultJava {
         };
         TestAbstractImpl mcThis = (TestAbstractImpl)(Object)x;
         mcThis.abstractMethodParam(expectedParam);
+    }
+
+    @Test
+    void testThrows(){
+        try {
+            ITestThrows x = ITestThrows.create();
+            x.checked();
+        } catch (IOException | RuntimeException e) {
+//            e.printStackTrace();
+        }
     }
 
 }

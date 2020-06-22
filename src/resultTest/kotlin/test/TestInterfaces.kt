@@ -2,6 +2,8 @@ package test
 
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
+import java.io.IOException
+import java.lang.Exception
 
 fun ITestAbstractImpl.testAbstractImplCalls() {
     assert(abstractMethod() is ITestAbstractClass)
@@ -144,6 +146,30 @@ class TestInterfaces {
 
     }
 
+    @Test
+    fun testEnum() {
+        assertEquals(ITestEnum.foo(), ITestEnum.THING2)
+        with(ITestEnum.THING) {
+            assertEquals(bar(), null)
+            assertEquals(x, 1)
+            x = 3
+            assertEquals(x, 3)
+        }
+
+        with(ITestEnum.THING2 as Enum<*>) {
+            assertEquals(name, "THING2")
+            assertEquals(ordinal, 1)
+        }
+
+        with(ITestEnum.values()) {
+            assertEquals(size, 2)
+            assertEquals(this[0], ITestEnum.THING)
+            assertEquals(this[1], ITestEnum.THING2)
+        }
+
+        assertEquals(ITestEnum.valueOf("THING"), ITestEnum.THING)
+    }
+
 
     @Test
     fun testFinalClass() {
@@ -166,6 +192,56 @@ class TestInterfaces {
     }
 
     @Test
+    fun testGenerics() {
+        with(
+            ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
+                    List<ArrayList<ITestConcreteClass>>, Int>()
+        ) {
+            val x: ITestInterface = ITestAbstractImpl.create(0, null)
+            val y: ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
+                ArrayList(),
+                ArrayList(),
+                listOf(),
+                listOf(),
+                listOf(ITestAbstractImpl.create(0, null)),
+                mutableListOf(x),
+                listOf(1, 2, "3")
+            )
+
+            assertEquals(compareTo(null), 2)
+
+
+            genericField1 = ArrayList()
+            genericField1.add(ITestConcreteClass.create())
+            assert(genericField1[0] is ITestConcreteClass)
+
+            val f2: List<*>? = genericField2
+            genericField2 = listOf<Nothing>()
+            assertEquals(genericField2, listOf<Nothing>())
+            val f3: List<ArrayList<ITestConcreteClass>>? = genericField3
+            genericField3 = listOf()
+            val f4: List<*>? = genericField4
+            genericField4 = mutableListOf()
+
+
+
+            with(newSomeInnerClass<Int>()) {
+                val i1: Int? = useInnerClassGeneric()
+                val i2: ArrayList<ITestConcreteClass>? = useOuterClassGeneric()
+            }
+        }
+
+        ITestGenerics.Extendor.create<ArrayList<ITestConcreteClass>>()
+
+
+
+
+        ITestGenerics.SomeInnerClass.array<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
+                List<ArrayList<ITestConcreteClass>>, Int, Int>(5)
+    }
+
+
+    @Test
     fun testInnerExtender() {
         with(ITestInnerExtender.create(0, ITestOtherClass.create())) {
             assertEquals(publicInt(), 2)
@@ -177,6 +253,39 @@ class TestInterfaces {
     @Test
     fun testInterface() {
         assertEquals(ITestInterface.x, 2)
+    }
+
+    @Test
+    fun testLambdaInterface() {
+//        val x : ITestLambdaInterface = ITestLambdaInterface {null}
+    }
+
+    @Test
+    fun testLambdaAnons() {
+        ITestLambdasAnons.foo()
+    }
+
+    @Test
+    fun testNormalClassExtender() {
+        // Not sure wtf is going on with kotlin analyzer and this class
+        val obj = ITestNormalClassExtender.create()
+        val asSuper = obj.asSuper()
+        asSuper.add("foo")
+        assertEquals(asSuper.size, 1)
+        assertEquals(asSuper[0], "foo")
+        asSuper.remove("foo")
+        assert(asSuper.isEmpty())
+
+        assertEquals(obj.foo(), "123")
+        assertEquals(asSuper.stream(), null)
+    }
+
+    @Test
+    fun testOverload(){
+        with(ITestOverload.create()){
+            x()
+            x(2)
+        }
     }
 
     @Test
@@ -213,62 +322,28 @@ class TestInterfaces {
     }
 
 
-
     @Test
-    fun testEnum() {
-        assertEquals(ITestEnum.foo(), ITestEnum.THING2)
-        with(ITestEnum.THING) {
-            assertEquals(bar(), null)
-            assertEquals(x, 1)
-            x = 3
-            assertEquals(x, 3)
+    fun testSuperClass(){
+        assertEquals(ITestSuperClass.getStaticField(),"static")
+        ITestSuperClass.setStaticField("foo")
+        assertEquals(ITestSuperClass.getStaticField(),"foo")
+        with(ITestSuperClass.create(ITestOtherClass.create())){
+            assertEquals(inheritedMethod(), 2)
         }
-
-        with(ITestEnum.THING2 as Enum<*>) {
-            assertEquals(name, "THING2")
-            assertEquals(ordinal, 1)
-        }
-
-        with(ITestEnum.values()) {
-            assertEquals(size, 2)
-            assertEquals(this[0], ITestEnum.THING)
-            assertEquals(this[1], ITestEnum.THING2)
-        }
-
-        assertEquals(ITestEnum.valueOf("THING"), ITestEnum.THING)
     }
 
     @Test
-    fun testGenerics() {
-        ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                List<ArrayList<ITestConcreteClass>>, Int>()
-        with(
-            ITestGenerics.create<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                    List<ArrayList<ITestConcreteClass>>, Int>()
-        ) {
-            val x: ITestInterface = ITestAbstractImpl.create(0, null)
-            val y: ArrayList<ITestConcreteClass>? = genericMethod<ArrayList<ITestConcreteClass>>(
-                ArrayList(),
-                ArrayList(),
-                listOf(),
-                listOf(),
-                listOf(ITestAbstractImpl.create(0, null)),
-                mutableListOf(x),
-                listOf(1, 2, "3")
-            )
+    fun testThrows(){
+        try {
+            with(ITestThrows.create()){
+                foo()
+                bar<IOException>()
+                checked()
+            }
+        }catch (e : Exception){
 
-            genericField1 = ArrayList()
-            genericField1.add(ITestConcreteClass.create())
-            assert(genericField1[0] is ITestConcreteClass)
-
-            newSomeInnerClass<Int>()
         }
 
-        ITestGenerics.Extendor.create<ArrayList<ITestConcreteClass>>()
-
-
-        ITestGenerics.SomeInnerClass.array<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                List<ArrayList<ITestConcreteClass>>, Int, Int>(5)
     }
 
 

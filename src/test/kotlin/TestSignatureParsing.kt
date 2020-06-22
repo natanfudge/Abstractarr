@@ -1,7 +1,6 @@
 import asm.readToClassNode
 import metautils.signature.*
 import org.junit.jupiter.api.Test
-import signature.*
 import testing.getResource
 import kotlin.test.assertEquals
 

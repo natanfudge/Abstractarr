@@ -10,11 +10,11 @@ import descriptor.ObjectType
 import descriptor.ReturnDescriptor
 import metautils.api.readFromJar
 import metautils.signature.*
-import signature.*
+import signature.annotated
+import signature.noAnnotations
+import signature.toJvmType
 import util.*
 import java.nio.file.Path
-
-
 
 
 data class AbstractionMetadata(
@@ -156,11 +156,12 @@ private data class ClassAbstractor(
 
 
         // Add SuperTyped<SuperClass> superinterface for classes which have a non-mc superclass
-        val superTypedInterface = getSuperTypedInterface()
-        //TODO: in the distributed version, add in the jdk interfaces
-        val interfaces = classApi.superInterfaces
-            .remapToApiClasses().appendIfNotNull(superTypedInterface)
+//        val superTypedInterface = getSuperTypeInterface()
 
+        // If it's not a mc class then we add an asSuper() method
+        val superClass = classApi.superClass?.let { if (it.isMcClass()) it.remapToApiClass() else null }
+
+        val interfaces = classApi.superInterfaces.remapToApiClasses().appendIfNotNull(superClass)
 
         val classInfo = ClassInfo(
             visibility = apiClassVisibility,
@@ -191,23 +192,23 @@ private data class ClassAbstractor(
         }
     }
 
-    private fun getSuperTypedInterface() = classApi.superClass?.let {
-        when {
-            it.isMcClass() -> it.remapToApiClass()
-            it.satisfyingTypeBoundsIsImpossible() -> null
-            else -> ClassGenericType(
-                SuperTypedPackage,
-                SimpleClassGenericType(
-                    SuperTypedName,
-                    TypeArgument.SpecificType(
-                        /*if (it.containsMcClasses()) it.remapToApiClass().type else it.type*/ it.remapToApiClass().type,
-                        wildcardType = null
-                    ).singletonList()
-                ).singletonList()
-            ).noAnnotations()
-        }
-
-    }
+//    private fun getSuperTypeInterface() = classApi.superClass?.let {
+//        when {
+//            it.isMcClass() -> it.remapToApiClass()
+//            it.satisfyingTypeBoundsIsImpossible() -> null
+//            else -> ClassGenericType(
+//                SuperTypedPackage,
+//                SimpleClassGenericType(
+//                    SuperTypedName,
+//                    TypeArgument.SpecificType(
+//                        /*if (it.containsMcClasses()) it.remapToApiClass().type else it.type*/ it.remapToApiClass().type,
+//                        wildcardType = null
+//                    ).singletonList()
+//                ).singletonList()
+//            ).noAnnotations()
+//        }
+//
+//    }
 
 
     // TODO: This will do for now. A proper solution will check if:
@@ -260,6 +261,7 @@ private data class ClassAbstractor(
     }
 
     private fun GeneratedClass.addApiInterfaceBody() {
+        addAsSuperMethod()
         for (method in classApi.methods) {
             if (method.isPublic) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
@@ -402,6 +404,34 @@ private data class ClassAbstractor(
 
         addConstructor(methodInfo)
     }
+
+    // Interfaces cannot have classes as their supertype, so we make a compromise by giving an asSuper() method that casts
+    // to that supertype.
+    private fun GeneratedClass.addAsSuperMethod() {
+        val superClass = classApi.superClass ?: return
+        if (!superClass.isMcClass()) {
+            addMethod(
+                name = "asSuper",
+                visibility = Visibility.Public,
+                returnType = superClass,
+                parameters = mapOf(), throws = listOf(), typeArguments = listOf(),
+                static = false, abstract = false, final = false
+            ) {
+                addStatement(ReturnStatement(ThisExpression.cast(fromType = classApi.asType(), toType = superClass)))
+            }
+        }
+    }
+
+//    private fun superTypedInterface(enclosedSuperClass: JavaClassType) = ClassGenericType(
+//        SuperTypedPackage,
+//        SimpleClassGenericType(
+//            SuperTypedName,
+//            TypeArgument.SpecificType(
+//                enclosedSuperClass.remapToApiClass().type,
+//                wildcardType = null
+//            ).singletonList()
+//        ).singletonList()
+//    ).noAnnotations()
 
     private fun GeneratedClass.addApiInterfaceFactory(method: ClassApi.Method) {
         // Abstract classes/interfaces can't be constructed directly
