@@ -2,6 +2,7 @@ package test
 
 import net.minecraft.TestAbstractImpl
 import net.minecraft.TestConcreteClass
+import net.minecraft.TestProtected
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 
@@ -98,9 +99,21 @@ class TestBaseClasses {
         }.testClashingNamesCalls()
 
         with(object: BaseTestClashingNames(){
+            override fun isSomeBool(): Boolean {
+                return true
+            }
 
+            override fun getSomeString(): String {
+                return "replaced"
+            }
+
+            override fun getSomeInt(p0: Int): Int {
+                return 10
+            }
         }){
-
+            assertEquals(isSomeBool, true)
+            assertEquals(someString, "replaced")
+            assertEquals(getSomeInt(1), 10)
         }
     }
 
@@ -109,13 +122,15 @@ class TestBaseClasses {
         with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
         }) {
             testConcreteClassCalls()
-
         }
 
         with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
             override fun publicInt(p0: ITestOtherClass?): Int {
                 return 3
             }
+
+
+
         }) {
             val mcThis = this as TestConcreteClass
             assertEquals(mcThis.publicInt(null), 3)
@@ -127,7 +142,47 @@ class TestBaseClasses {
             assertEquals(publicInt(), 2)
         }
 
+//        object  : TestProtected(){
+//            override fun fooNoMc() {
+//                val x = TestProtected.constant
+//                staticField = "bar"
+//            }
+//        }
     }
+
+//
+//    protected static String protectedStatic() {
+//        return "SomeString";
+//    }
+//
+//    public static int publicStatic() {
+//        return 4;
+//    }
+//
+//    int packageArgs(TestOtherClass arg1, int arg2) {
+//        return 1;
+//    }
+//
+//    public int mutatesField() {
+//        privateField++;
+//        return 123;
+//    }
+//
+//    public final int finalMethod() {
+//        return 3;
+//    }
+//
+//    public TestStaticInnerClass innerClassMethod() {
+//        return new TestStaticInnerClass(23, new TestOtherClass());
+//    }
+//
+//    public TestConcreteClass(int arg1, TestOtherClass arg2) {
+//        super(arg2);
+//    }
+//
+//    public TestConcreteClass() {
+//        this(0, null);
+//    }
 
 
     @Test

@@ -9,7 +9,10 @@ import descriptor.JvmType
 import descriptor.ObjectType
 import descriptor.ReturnDescriptor
 import metautils.api.readFromJar
-import metautils.signature.*
+import metautils.signature.ArrayGenericType
+import metautils.signature.GenericReturnType
+import metautils.signature.GenericsPrimitiveType
+import metautils.signature.TypeArgumentDeclaration
 import signature.annotated
 import signature.noAnnotations
 import signature.toJvmType
@@ -67,17 +70,13 @@ private fun listAllGeneratedClasses(
     metadata: AbstractionMetadata
 ): Map<QualifiedName, ClassEntry> = with(metadata.versionPackage) {
     classes.flatMap { outerClass ->
-        outerClass.allInnerClassesAndThis().filter { it.isPublic }.flatMap {
-            val apiInterface = it.name.toApiClass() to entryJustForAccess(
-                apiInterfaceAccess(metadata), isStatic = it.isInnerClass
+        outerClass.allInnerClassesAndThis().filter { it.isPublic || it.isProtected }.flatMap {
+            val baseclass = it.name.toBaseClass() to entryJustForAccess(
+                baseClassAccess(origIsInterface = it.isInterface), isStatic = it.isStatic, visibility = it.visibility
             )
 
-//            val apiBaseclassInterface = it.name.toBaseApiInterface() to entryJustForAccess(
-//                apiInterfaceAccess(metadata), isStatic = it.isInnerClass
-//            )
-
-            val baseclass = it.name.toBaseClass() to entryJustForAccess(
-                baseClassAccess(origIsInterface = it.isInterface), isStatic = it.isStatic
+            val apiInterface = it.name.toApiClass() to entryJustForAccess(
+                apiInterfaceAccess(metadata), isStatic = it.isInnerClass, visibility = Visibility.Public
             )
 
             listOf(apiInterface, baseclass)
@@ -85,10 +84,10 @@ private fun listAllGeneratedClasses(
     }.toMap()
 }
 
-private fun entryJustForAccess(access: ClassAccess, isStatic: Boolean): ClassEntry {
+private fun entryJustForAccess(access: ClassAccess, visibility: Visibility, isStatic: Boolean): ClassEntry {
     return ClassEntry(
         methods = setOf(), superInterfaces = listOf(), superClass = null,
-        access = access.toAsmAccess(ClassVisibility.Public, isStatic)
+        access = access.toAsmAccess(visibility, isStatic)
     )
 }
 
@@ -98,7 +97,7 @@ private fun apiInterfaceAccess(metadata: AbstractionMetadata) = ClassAccess(
     variant = ClassVariant.Interface
 )
 
-private val apiClassVisibility = ClassVisibility.Public
+//private val apiClassVisibility = ClassVisibility.Public
 
 private fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
     isFinal = false,
@@ -133,7 +132,7 @@ private data class ClassAbstractor(
 
 
         val classInfo = ClassInfo(
-            visibility = apiClassVisibility,
+            visibility = classApi.visibility,
             access = baseClassAccess(classApi.isInterface),
             shortName = shortName.innermostClass(),
             typeArguments = baseClassTypeArguments(),
@@ -164,14 +163,20 @@ private data class ClassAbstractor(
         val interfaces = classApi.superInterfaces.remapToApiClasses().appendIfNotNull(superClass)
 
         val classInfo = ClassInfo(
-            visibility = apiClassVisibility,
+            visibility = Visibility.Public,
             access = apiInterfaceAccess(metadata),
             shortName = shortName.innermostClass(),
             typeArguments = allApiInterfaceTypeArguments(),
             superInterfaces = interfaces,
             superClass = null,
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
-        ) { addApiInterfaceBody() }
+        ) {
+            // Optimally we would like to not expose this interface at all in case this class is protected,
+            // but if we declare it protected we can't reference it from the baseclass.
+            // So as a compromise we declare the class as public with no body.
+            //TODO: add some marker to tell users this is supposed to be protected.
+            if (!classApi.isProtected) addApiInterfaceBody()
+        }
 
         writeClass(destPath, classInfo, packageName, outerClass, isInnerClassStatic = true)
     }
@@ -211,14 +216,14 @@ private data class ClassAbstractor(
 //    }
 
 
-    // TODO: This will do for now. A proper solution will check if:
-    // 1. This is used as a superclass in this context (this is already the case when this method is called)
-    // 2. This is a non-mc class
-    // 3. Any type arguments are bound by a type that contains themselves (e.g. T extends Enum<T>)
-    // ALTERNATIVELY------- instead of generating a SuperTyped<> interfaces just add the cast method itself to the class
-    // OR do some bytecode shenanigans if that works
-    private fun JavaClassType.satisfyingTypeBoundsIsImpossible() = type.packageName == EnumPackage
-            && type.classNameSegments[0].name == EnumName
+//    // TODO: This will do for now. A proper solution will check if:
+//    // 1. This is used as a superclass in this context (this is already the case when this method is called)
+//    // 2. This is a non-mc class
+//    // 3. Any type arguments are bound by a type that contains themselves (e.g. T extends Enum<T>)
+//    // ALTERNATIVELY------- instead of generating a SuperTyped<> interfaces just add the cast method itself to the class
+//    // OR do some bytecode shenanigans if that works
+//    private fun JavaClassType.satisfyingTypeBoundsIsImpossible() = type.packageName == EnumPackage
+//            && type.classNameSegments[0].name == EnumName
 
     private fun getAllSuperMethods(): List<ClassApi.Method> = index.getSuperTypesRecursively(classApi.name)
         .mapNotNull { mcClasses[it]?.methods }.flatten()
@@ -234,30 +239,40 @@ private data class ClassAbstractor(
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
         for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
-            if (!method.isConstructor && !method.isStatic) {
+            if (!method.isConstructor) {
                 if (method.isPublic || method.isProtected) {
                     // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
                     // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
                     // it will be called in the api as well (without needing a bridge method)
                     if (method.descriptorContainsMcClasses()) {
-                        addBridgeMethod(method/*, delegateToApiInterface = false*/)
-                        //TODO: move the isoverride check into addApiDeclaredMethod
+                        addBridgeMethod(method)
 
                         // We need to add our own override to the method because we want the bridge method
                         // to call the mc method (with a super call) by default.
                         // If we don't add this method here to override the api method, it will call the method in the api interface,
                         // which will call the bridge method - infinite recursion.
-                        addApiDeclaredMethod(method, callSuper = true)
+                        if (!method.isStatic || method.isProtected) addApiDeclaredMethod(method, callSuper = true)
                     }
                 }
             }
         }
 
+        for (field in classApi.fields) {
+            if (field.isProtected) abstractField(field, castSelf = false)
+        }
+
         for (innerClass in classApi.innerClasses) {
-            if (innerClass.isPublic && !innerClass.isFinal) {
+            if ((innerClass.isPublic || innerClass.isProtected) && !innerClass.isFinal) {
                 copy(classApi = innerClass).createBaseclass(destPath = null, outerClass = this)
             }
+
+            // Inner classes are constructed by their parent
+            if (!innerClass.isStatic && innerClass.isProtected) {
+                addInnerClassConstructor(innerClass)
+            }
         }
+
+        if (classApi.isProtected) addArrayFactory()
     }
 
     private fun GeneratedClass.addApiInterfaceBody() {
@@ -275,14 +290,15 @@ private data class ClassAbstractor(
         }
 
         for (field in classApi.fields) {
-            abstractField(field)
+            if (field.isPublic) abstractField(field, castSelf = true)
         }
         for (innerClass in classApi.innerClasses) {
-            if (!innerClass.isPublic) continue
-            copy(classApi = innerClass).createApiInterface(destPath = null, outerClass = this)
+            if (innerClass.isPublic || innerClass.isProtected) {
+                copy(classApi = innerClass).createApiInterface(destPath = null, outerClass = this)
+            }
 
             // Inner classes are constructed by their parent
-            if (!innerClass.isStatic) {
+            if (!innerClass.isStatic && innerClass.isPublic) {
                 addInnerClassConstructor(innerClass)
             }
         }
@@ -476,28 +492,27 @@ private data class ClassAbstractor(
         body = body
     )
 
-    private fun GeneratedClass.abstractField(field: ClassApi.Field) {
-        if (!field.isPublic) return
+    private fun GeneratedClass.abstractField(field: ClassApi.Field, castSelf: Boolean) {
         if (field.isFinal && field.isStatic) {
             addConstant(field)
         } else {
-            addGetter(field)
+            addGetter(field, castSelf)
         }
 
         if (!field.isFinal) {
-            addSetter(field)
+            addSetter(field, castSelf)
         }
     }
 
     private fun GeneratedClass.addConstant(field: ClassApi.Field) {
         addField(
-            name = field.name, isFinal = true, isStatic = true, visibility = Visibility.Public,
+            name = field.name, isFinal = true, isStatic = true, visibility = field.visibility,
             type = field.type.remapToApiClass(),
-            initializer = abstractedFieldExpression(field).castFromMcToApi(field.type)
+            initializer = abstractedFieldExpression(field, castSelf = false).castFromMcToApi(field.type)
         )
     }
 
-    private fun GeneratedClass.addGetter(field: ClassApi.Field) {
+    private fun GeneratedClass.addGetter(field: ClassApi.Field, castSelf: Boolean) {
         val getterName = field.getGetterPrefix() +
                 // When it starts with "is" no prefix is added so there's no need to capitalize
                 if (field.name.startsWith(BooleanGetterPrefix)) field.name else field.name.capitalize()
@@ -506,7 +521,7 @@ private data class ClassAbstractor(
             name = if (classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }) getterName + "_field"
             else getterName,
             parameters = mapOf(),
-            visibility = Visibility.Public,
+            visibility = field.visibility,
             returnType = field.type.remapToApiClass(),
             abstract = false,
             static = field.isStatic,
@@ -514,7 +529,7 @@ private data class ClassAbstractor(
             typeArguments = listOf(),
             throws = listOf()
         ) {
-            val fieldAccess = abstractedFieldExpression(field)
+            val fieldAccess = abstractedFieldExpression(field, castSelf)
             addStatement(
                 ReturnStatement(
                     fieldAccess.castFromMcToApi(field.type)
@@ -528,11 +543,11 @@ private data class ClassAbstractor(
             if (name.startsWith(BooleanGetterPrefix)) "" else BooleanGetterPrefix
         } else "get"
 
-    private fun GeneratedClass.addSetter(field: ClassApi.Field) {
+    private fun GeneratedClass.addSetter(field: ClassApi.Field, castSelf: Boolean) {
         addMethod(
             name = "set" + field.name.capitalize(),
             parameters = mapOf(field.name to field.type.remapToApiClass()),
-            visibility = Visibility.Public,
+            visibility = field.visibility,
             returnType = GenericReturnType.Void.noAnnotations(),
             abstract = false,
             static = field.isStatic,
@@ -542,7 +557,7 @@ private data class ClassAbstractor(
         ) {
             addStatement(
                 AssignmentStatement(
-                    target = abstractedFieldExpression(field),
+                    target = abstractedFieldExpression(field, castSelf),
                     assignedValue = VariableExpression(field.name).castFromApiToMc(field.type)
                 )
             )
@@ -550,13 +565,13 @@ private data class ClassAbstractor(
     }
 
     private fun abstractedFieldExpression(
-        field: ClassApi.Field
+        field: ClassApi.Field,
+        castSelf: Boolean
     ): FieldExpression {
         val mcClassType = classApi.asRawType()
         return FieldExpression(
-            receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType()) else ThisExpression.castFromApiToMc(
-                mcClassType
-            ),
+            receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType())
+            else ThisExpression.let { if (castSelf) it.castFromApiToMc(mcClassType) else it },
             name = field.name,
             owner = classApi.asJvmType(),
             type = field.type.toJvmType()
@@ -568,7 +583,7 @@ private data class ClassAbstractor(
             val constructedInnerClass = innerClass.asType()
             addMethod(
                 name = "new" + innerClass.name.shortName.innermostClass(),
-                visibility = Visibility.Public,
+                visibility = innerClass.visibility,
                 static = false,
                 final = false,
                 abstract = false,

@@ -92,6 +92,8 @@ dependencies {
 //    testRuntime(mcJarWithInterfaces)
     resultTestImplementation(mcJarWithInterfaces)
     apiRuntimeImplementation(mcJarWithInterfaces)
+    apiRuntimeCompileOnly(files("build/resources/test/abstractedAsmApi.jar"))
+    apiRuntimeRuntime(files("build/resources/test/abstractedAsm.jar"))
 }
 
 

@@ -13,4 +13,12 @@ public abstract class TestAbstractClass implements TestInterface {
     public TestOtherClass baz() {
         return null;
     }
+
+    public static void testStatic() {
+
+    }
+
+    public static void testStaticParam(TestOtherClass mc) {
+
+    }
 }

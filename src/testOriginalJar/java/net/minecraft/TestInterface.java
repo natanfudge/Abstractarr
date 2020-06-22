@@ -18,4 +18,12 @@ public interface TestInterface {
     TestOtherClass boz(TestOtherClass x);
 
     int x = 2;
+
+    public static void testStatic(){
+
+    }
+
+    public static void testStaticParam(TestOtherClass mc) {
+
+    }
 }

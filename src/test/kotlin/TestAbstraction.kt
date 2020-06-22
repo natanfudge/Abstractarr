@@ -3,7 +3,8 @@ import asm.readToClassNode
 import org.junit.jupiter.api.Test
 import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
-import testing.getResource
+import metautils.testing.getResource
+import metautils.testing.verifyClassFiles
 import util.*
 import java.io.PrintWriter
 import java.net.URLClassLoader
@@ -18,7 +19,7 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
-
+//TODO: make automatic jar verification instead of this garbage
     private val classes = listOf(
         "ExtendedInterface", "ExtendedInterfaceRaw", "TestAbstractClass", "TestAbstractImpl",
         "TestAnnotations", "TestArrays", "TestClashingNames", "TestConcreteClass", "TestEnum", "TestFinalClass",
@@ -45,41 +46,16 @@ class TestAbstraction {
             versionPackage = VersionPackage("v1"),
             classPath = listOf(), fitToPublicApi = false, writeRawAsm = true
         )
-//        Abstractor.abstract(mcJar, dest, metadata = metadata)
         Abstractor.abstract(mcJar, implDest, metadata = metadata)
         Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
 
 
-        val asmJar = implDest.convertDirToJar()
+        implDest.convertDirToJar()
         implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
-        verifyBytecode(asmJar)
+        verifyClassFiles(implDest, classpath = listOf(Paths.get("testdata/mcJarWithInterfaces.jar")))
 
         apiDest.convertDirToJar()
 
-//        verifyJava(dest)
-    }
-
-    private fun verifyBytecode(asmJar: Path) {
-        val mcJarWithInterfaces = Paths.get("testdata/mcJarWithInterfaces.jar")
-        val classLoader = URLClassLoader(
-            arrayOf(asmJar.toUri().toURL(), mcJarWithInterfaces.toUri().toURL())
-            /* , this::class.java.classLoader*/
-        )
-        classes.forEach {
-            try {
-                Class.forName("v1.net.minecraft.I$it", true, classLoader)
-            } catch (e: Throwable) {
-                println("Error in interface of $it:")
-                throw e
-            }
-            try {
-                if (it !in noBase) Class.forName("v1.net.minecraft.Base$it", true, classLoader)
-            } catch (e: Throwable) {
-                println("Error in baseclass of $it:")
-                throw e
-            }
-
-        }
     }
 
     private fun verifyJava(dest: Path) {
