@@ -1,12 +1,8 @@
 package test
 
-import net.minecraft.TestAbstractImpl
-import net.minecraft.TestConcreteClass
-import net.minecraft.TestLambdasAnons
-import net.minecraft.TestOverrideReturnTypeChangeSuper
+import net.minecraft.*
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
-import java.io.IOException
 
 
 @Suppress("CAST_NEVER_SUCCEEDS")
@@ -104,29 +100,67 @@ class TestBaseClasses {
 
     @Test
     fun testAnnotations() {
-        with(object : BaseTestAnnotations() {
-        }) {
+        object : BaseTestAnnotations() {
+        }.apply {
             testAnnotationsCalls()
         }
-        //TODO
-        with(object : BaseTestAnnotations() {
-        }) {
+
+        val expected = ITestAbstractImpl.create(0, null)
+        object : BaseTestAnnotations() {
+            override fun abstractMethod(): ITestAbstractClass? {
+                return expected
+            }
+
+            override fun abstractMethodParam(p0: ITestConcreteClass?): ITestAbstractClass {
+                return super.abstractMethodParam(p0)
+            }
+
+            override fun nullable(): String? {
+                return "foonull"
+            }
+
+            override fun foo(): ITestInterface {
+                return super.foo()
+            }
+
+            override fun boz(p0: ITestOtherClass?): ITestOtherClass {
+                return super.boz(p0)
+            }
+
+
+        }.apply {
+            this as TestAnnotations
+            assertEquals(nullable(), "foonull")
+            assertEquals(expected, abstractMethod())
         }
     }
 
     @Test
     fun testArrays() {
-        with(object : BaseTestArrays() {
-        }) {
+        object : BaseTestArrays() {
+        }.apply {
             testArraysCalls()
         }
 
-        //TODO
-        with(object : BaseTestArrays() {
-        }) {
+        val expected = ITestConcreteClass.create()
+        val eParam = arrayOfNulls<TestConcreteClass>(3)
+        object : BaseTestArrays() {
+            override fun arrMethod(): Array<ITestConcreteClass> {
+                val arr = ITestConcreteClass.array(3)
+                arr[0] = expected
+                return arr
+            }
+
+            override fun arrParam(p0: Array<out ITestConcreteClass>?) {
+                assertEquals(eParam, p0)
+            }
+        }.apply {
+            val x = this as TestArrays
+            val y = x.arrMethod()[0]
+            assertEquals(y, expected)
+            arrParam(eParam)
         }
     }
-
 
     @Test
     fun testClashingNames() {
@@ -237,7 +271,7 @@ class TestBaseClasses {
     @Test
     fun testInterface() {
         //TODO
-        object : BaseTestInterface{
+        object : BaseTestInterface {
 
         }.apply {
 
@@ -258,13 +292,13 @@ class TestBaseClasses {
     @Test
     fun testNormalClassExtender() {
         //TODO
-       object : BaseTestNormalClassExtender(){
+        object : BaseTestNormalClassExtender() {
 
-       }.apply {
-           testNormalClassExtenderCalls()
-       }
+        }.apply {
+            testNormalClassExtenderCalls()
+        }
 
-        object : BaseTestNormalClassExtender(){
+        object : BaseTestNormalClassExtender() {
 
         }.apply {
         }
@@ -288,13 +322,13 @@ class TestBaseClasses {
     @Test
     fun testOtherClass() {
         //TODO
-        object : BaseTestOtherClass(){
+        object : BaseTestOtherClass() {
 
         }.apply {
             testOtherClassCalls()
         }
 
-        object : BaseTestOtherClass(){
+        object : BaseTestOtherClass() {
 
         }.apply {
         }
@@ -304,13 +338,13 @@ class TestBaseClasses {
     @Test
     fun testOverrideReturnTypeChange() {
         //TODO
-        object :BaseTestOverrideReturnTypeChange(){
+        object : BaseTestOverrideReturnTypeChange() {
 
         }.apply {
             testOverrideReturnTypeChangeCalls()
         }
 
-        object :BaseTestOverrideReturnTypeChange(){
+        object : BaseTestOverrideReturnTypeChange() {
 
         }.apply {
         }
@@ -320,13 +354,13 @@ class TestBaseClasses {
     @Test
     fun testOverrideReturnTypeChangeSuper() {
         //TODO
-        object :TestOverrideReturnTypeChangeSuper(){
+        object : TestOverrideReturnTypeChangeSuper() {
 
         }.apply {
             testOverrideReturnTypeChangeSuperCalls()
         }
 
-        object :TestOverrideReturnTypeChangeSuper(){
+        object : TestOverrideReturnTypeChangeSuper() {
 
         }.apply {
         }
@@ -336,7 +370,7 @@ class TestBaseClasses {
     @Test
     fun testSuperClass() {
         //TODO
-        object: BaseTestSuperClass(null){
+        object : BaseTestSuperClass(null) {
 
         }.apply {
 
@@ -347,13 +381,13 @@ class TestBaseClasses {
     fun testThrows() {
         try {
             //TODO: (needs to have throws in baseclasses...)
-            object : BaseTestThrows(){
+            object : BaseTestThrows() {
 
             }.apply {
                 testThrowsCalls()
             }
 
-            object : BaseTestThrows(){
+            object : BaseTestThrows() {
 
             }.apply {
             }
