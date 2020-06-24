@@ -37,7 +37,7 @@ internal fun ClassGenericType.pushAllTypeArgumentsToInnermostClass(): ClassGener
     return copy(classNameSegments = modifiedSegments)
 }
 
-//TODO: this is a bad solution. What we need to do is have remapToApiClass go through the tree and selectively
+//soft to do: this is a bad solution. What we need to do is have remapToApiClass go through the tree and selectively
 // push type arguments to the end when it detects an inner api class.
 // for now it will do though because inner classes are rare in MC
 internal fun JavaType<ArrayGenericType>.pushAllArrayTypeArgumentsToInnermostClass() =

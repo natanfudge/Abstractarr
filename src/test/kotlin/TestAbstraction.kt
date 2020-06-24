@@ -19,19 +19,6 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
-//TODO: make automatic jar verification instead of this garbage
-    private val classes = listOf(
-        "ExtendedInterface", "ExtendedInterfaceRaw", "TestAbstractClass", "TestAbstractImpl",
-        "TestAnnotations", "TestArrays", "TestClashingNames", "TestConcreteClass", "TestEnum", "TestFinalClass",
-        "TestGenerics", "TestInnerExtender", "TestInterface", "TestLambdaInterface", "TestLambdasAnons",
-        "TestNormalClassExtender", "TestOtherClass", "TestOverload", /*"TestOverrideReturnTypeChange",
-        "TestOverrideReturnTypeChangeSuper",*/ "TestSuperClass", "TestThrows"
-    )
-
-    private val noBase = listOf(
-       "TestEnum", "TestFinalClass"
-    )
-
     @Test
     fun testAbstraction() {
 

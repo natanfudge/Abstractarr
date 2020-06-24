@@ -306,18 +306,53 @@ class TestBaseClasses {
 
     @Test
     fun testInnerExtender() {
-        with(object : BaseTestInnerExtender(0, ITestOtherClass.create()) {
+        object : BaseTestInnerExtender(0, ITestOtherClass.create()) {
 
-        }) {
+        }.apply {
             testInnerExtenderCalls()
         }
 
-        with(object : BaseTestInnerExtender(0, ITestOtherClass.create()) {
-            //TODO
-        }) {
+        var x = 0
+
+        object : BaseTestInnerExtender(0, ITestOtherClass.create()) {
+            init {
+                assertEquals(protectedStatic(), "SomeString")
+            }
+            override fun inheritedMethod(): Int {
+                return 5
+            }
+
+            override fun overridenMethod(): Int {
+                return 6
+            }
+
+            override fun publicInt(): Int {
+                return 7
+            }
+
+            override fun mutatesField(): Int {
+                return 8
+            }
+
+            override fun normalMethod() {
+                x = 9
+            }
+
+        }.apply {
+            assertEquals(inheritedField,"inherited")
+            this as TestInnerExtender
+            assertEquals(inheritedMethod(),5)
+            assertEquals(overridenMethod(), 6)
+
+            assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStatic(), 4)
+            assertEquals(publicInt(),7)
+            assertEquals(mutatesField(),8)
+            assertEquals(finalMethod(),3)
+            normalMethod()
+            assertEquals(x, 9)
+
         }
     }
-
 
     @Test
     fun testInterface() {

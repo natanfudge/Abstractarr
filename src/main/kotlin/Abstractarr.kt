@@ -5,6 +5,7 @@ import codegeneration.*
 import codegeneration.asm.AsmCodeGenerator
 import metautils.codegeneration.asm.toAsmAccess
 import metautils.api.*
+import metautils.codegeneration.*
 import metautils.descriptor.JvmPrimitiveType
 import metautils.descriptor.JvmType
 import metautils.descriptor.ObjectType
@@ -43,7 +44,10 @@ object Abstractor {
         destDir.createDirectory()
 
         val classes = ClassApi.readFromJar(mcJar)
-        val classNamesToClasses = classes.map { it.name to it }.toMap()
+        val classNamesToClasses = classes.flatMap { outerClass ->
+            outerClass.allInnerClassesAndThis()
+                .map { it.name to it }
+        }.toMap()
 
         // We need to add the access of api interfaces, base classes, and base api interfaces.
         // For other things in ClassEntry we just pass empty list in assumption they won't be needed.
@@ -114,8 +118,6 @@ private data class ClassAbstractor(
     private val classApi: ClassApi,
     private val mcClasses: Map<QualifiedName, ClassApi>
 ) {
-    //    //TODO: more sophisticated filtration system
-//    private val bannedBaseclasses = listOf("net/minecraft/TestConcreteClass")
     fun abstractClass(outerClass: GeneratedClass?, destPath: Path?) {
         check(classApi.visibility == ClassVisibility.Public)
         createApiInterface(outerClass, destPath)
@@ -125,15 +127,6 @@ private data class ClassAbstractor(
 
     private fun apiClassName(outerClass: GeneratedClass?, nameMap: (QualifiedName) -> QualifiedName) =
         if (outerClass == null) nameMap(classApi.name) else classApi.name
-
-
-//    private fun getClosestNonMcSuperclass(): QualifiedName? = classApi.superClass
-//        ?.let {
-//            for (superType in index.getAllSuperClassesFromClassToObject(it.type.toJvmQualifiedName())) {
-//                if (!superType.isMcClassName()) return@let superType
-//            }
-//            null
-//        }
 
 
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
@@ -221,18 +214,6 @@ private data class ClassAbstractor(
         }
     }
 
-
-//    private fun getAllSuperMethods(): List<ClassApi.Method> = index.getSuperTypesRecursively(classApi.name)
-//        .mapNotNull { superClassName ->
-//            val superClass = mcClasses[superClassName] ?: return@mapNotNull null
-//            superClass.methods.map {
-//                TODO("Replace with do while method")
-//            }
-//
-////            TODO()
-//        }.flatten()
-
-
     private fun GeneratedClass.addBaseclassBody() {
         for (method in classApi.methods) {
             if ((method.isPublic || method.isProtected) && method.isConstructor) {
@@ -244,22 +225,40 @@ private data class ClassAbstractor(
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
         for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
-            if (!method.isConstructor) {
-                if (method.isPublic || method.isProtected) {
-                    // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
-                    // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
-                    // it will be called in the api as well (without needing a bridge method)
-                    if (method.descriptorContainsMcClasses()) {
-                        addBridgeMethod(method)
-
-                        // We need to add our own override to the method because we want the bridge method
-                        // to call the mc method (with a super call) by default.
-                        // If we don't add this method here to override the api method, it will call the method in the api interface,
-                        // which will call the bridge method - infinite recursion.
-                        if (!method.isStatic || method.isProtected) addApiDeclaredMethod(method, callSuper = true)
-                    }
+            // Constructors are handled separately above
+            if (method.isConstructor) continue
+            val containsMc = method.descriptorContainsMcClasses()
+            if (method.isPublic || method.isProtected) {
+                // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
+                // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
+                // it will be called in the api as well (without needing a bridge method)
+                if (containsMc) addBridgeMethod(method)
+            }
+            if (method.isPublic) {
+                // We need to add our own override to the method because we want the bridge method
+                // to call the mc method (with a super call) by default.
+                // If we don't add this method here to override the api method, it will call the method in the api interface,
+                // which will call the bridge method - infinite recursion.
+                if (!method.isStatic && containsMc) addApiDeclaredMethod(method, callSuper = true)
+            }
+            if (method.isProtected) {
+                // Multiple things to consider here.
+                // 1. In the implementation jar (fitToPublicApi = false), there's no need to add methods that don't contain
+                // mc classes, because when an api user calls a method without mc classes, the jvm will just look up
+                // to the mc class and call it. But when a mc class is in the descriptor, the api method descriptor
+                // will get remapped to have api classes, so the call will no longer be valid for the originally declared
+                // mc methods.
+                // We also actively cannot add a "containsMc = false" method when mc declares it as final,
+                // because it will be considered as an override for the mc declared method. (Which is not allowed for final methods)
+                // 2. In the api jar (fitToPublicApi = true), the mc methods are not seen by the user so we need to also add
+                // "containsMc = false" methods. There is no problem of overriding because it's not passed through a JVM verifier.
+                if (!metadata.fitToPublicApi) {
+                    if (containsMc) addApiDeclaredMethod(method, callSuper = true)
+                } else {
+                    addApiDeclaredMethod(method, callSuper = true)
                 }
             }
+
         }
 
         for (field in classApi.fields) {
@@ -338,8 +337,6 @@ private data class ClassAbstractor(
                 returnType = mcReturnType.remapToApiClass().toJvmType(),
                 // In a bridge method, call the api interface
                 // (so when mc calls it it will reach the api overrides)
-                //TODO: change based on delegateToApiInterface
-//                owner = mcClassType.remapToApiClass().toJvmType()
                 methodAccess = method.access,
                 receiverAccess = classApi.access/*.copy(variant = ClassVariant.Interface)*/,
                 owner = mcClassType.toJvmType()
@@ -677,7 +674,6 @@ private data class ClassAbstractor(
 //        fun <T> bar(t1: T1, t: T) {}
 //    }
 
-    //TODO: fix type argument name conflicts
 
     private fun getAllSuperClassMinecraftMethods(): List<ClassApi.Method> {
         //  ClassApi(Foo)
@@ -698,7 +694,8 @@ private data class ClassAbstractor(
             // [<T> bar(t1: T1, t: T)]
             val allMethodsBeforeInlining = (methods + classApiOfCurrent.methods)
             // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
-            val allMethodsConflictsResolved = allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
+            val allMethodsConflictsResolved =
+                allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
 
             // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
             methods = allMethodsConflictsResolved
