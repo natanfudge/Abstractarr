@@ -25,9 +25,10 @@ public class TestGenerics<T1 extends ArrayList<TestConcreteClass>
     }
 
     public <T extends T2> T genericMethod(T param1, T2 param2, List<String> param3, List<TestAbstractClass> param4,
-                                          List<? extends TestAbstractClass> param5, List<? super TestAbstractImpl> param6, List<?> param7) {
+                                          List<? extends TestAbstractClass> param5, List<? super TestAbstractImpl> param6, List<?> param7,TestOtherClass param8) {
         return null;
     }
+
 
     public class SomeInnerClass<T> {
         public T useInnerClassGeneric() {

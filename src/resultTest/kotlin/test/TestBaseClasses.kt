@@ -2,6 +2,8 @@ package test
 
 import net.minecraft.*
 import org.junit.jupiter.api.Test
+import testBaseclass
+import testBaseclassExtendor
 import v1.net.minecraft.*
 
 
@@ -180,55 +182,67 @@ class TestBaseClasses {
                 return 10
             }
         }) {
-            assertEquals(isSomeBool, true)
-            assertEquals(someString, "replaced")
-            assertEquals(getSomeInt(1), 10)
+            val mcThis = this as TestClashingNames
+            assertEquals(mcThis.isSomeBool, true)
+            assertEquals(mcThis.getSomeString(), "replaced")
+            assertEquals(mcThis.getSomeInt(1), 10)
         }
     }
 
+
     @Test
     fun testConcreteClass() {
-        with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
-        }) {
+        object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
+        }.apply {
             testConcreteClassCalls()
 
-            with(object : BaseTestConcreteClass.TestInnerClass(null) {
-
-            }) {
-                testConcreteInnerCalls()
-            }
-
-            with(object : BaseTestConcreteClass.TestInnerClass(null) {
-                //TODO
-            }) {
-            }
         }
 
-        with(object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
+        val expected = ITestConcreteClass.TestStaticInnerClass.create(0, ITestOtherClass.create())
+
+        object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
             override fun publicInt(p0: ITestOtherClass?): Int {
                 return 3
             }
 
+            override fun mutatesField(): Int {
+                return 100
+            }
 
-        }) {
+            override fun innerClassMethod(): ITestConcreteClass.TestStaticInnerClass {
+                return expected
+            }
+
+
+        }.apply {
             val mcThis = this as TestConcreteClass
             assertEquals(mcThis.publicInt(null), 3)
+            assertEquals(mutatesField(), 100)
+            assertEquals(innerClassMethod(), expected)
         }
 
-        //TODO
-        with(object : BaseTestConcreteClass.TestStaticInnerClass(1, ITestOtherClass.create()) {
 
-        }) {
-            assertEquals(publicInt(), 2)
+        object : BaseTestConcreteClass.TestStaticInnerClass(1, ITestOtherClass.create()) {
+            override fun publicInt(): Int {
+                return 50
+            }
+
+            override fun mutatesField(): Int {
+                return 100
+            }
+
+        }.apply {
+            val mcThis = this as TestConcreteClass.TestStaticInnerClass
+            assertEquals(publicInt(), 50)
+            assertEquals(mcThis.publicInt(), 50)
+            assertEquals(mutatesField(), 100)
         }
-
 
     }
 
 
     @Test
     fun testGenerics() {
-        //TODO
         with(
             object : BaseTestGenerics<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
                     List<ArrayList<ITestConcreteClass>>, Int>() {
@@ -237,19 +251,56 @@ class TestBaseClasses {
         ) {
             testGenericsCalls()
 
-
-
-            with(object : BaseTestGenerics<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
-                    List<ArrayList<ITestConcreteClass>>, Int>.SomeInnerClass<String>() {
-
-            }) {
-            }
         }
 
-        with(object : BaseTestGenerics.Extendor<ArrayList<ITestConcreteClass>() {
 
-        }) {
+        val eParam = listOf<String>()
 
+        object : BaseTestGenerics<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>,
+                List<ArrayList<ITestConcreteClass>>, Int>() {
+            override fun compareTo(other: ITestInterface?): Int {
+                return 23
+            }
+
+            override fun <T : ArrayList<ITestConcreteClass>?> genericMethod(
+                p0: T,
+                p1: ArrayList<ITestConcreteClass>?,
+                p2: MutableList<String>?,
+                p3: MutableList<ITestAbstractClass>?,
+                p4: MutableList<out ITestAbstractClass>?,
+                p5: MutableList<in ITestAbstractImpl>?,
+                p6: MutableList<*>?,
+                p7: ITestOtherClass?
+            ): T? {
+                assertEquals(p2, eParam)
+                return null
+            }
+        }.apply {
+            val x = this as TestGenerics<ArrayList<TestConcreteClass>, ArrayList<TestConcreteClass>,
+                    List<ArrayList<TestConcreteClass>>, Int>
+            assertEquals(x.compareTo(null), 23)
+
+            testBaseclass(eParam)
+        }
+
+        val expectedParam = TestOtherClass()
+        object : BaseTestGenerics.Extendor<ArrayList<ITestConcreteClass>>() {
+            override fun <T_OVERRIDE : ArrayList<ITestConcreteClass>?> genericMethod(
+                p0: T_OVERRIDE,
+                p1: ArrayList<ITestConcreteClass>?,
+                p2: MutableList<String>?,
+                p3: MutableList<ITestAbstractClass>?,
+                p4: MutableList<out ITestAbstractClass>?,
+                p5: MutableList<in ITestAbstractImpl>?,
+                p6: MutableList<*>?,
+                p7: ITestOtherClass?
+            ): T_OVERRIDE {
+                assertEquals(p7, expectedParam)
+                return super.genericMethod(p0, p1, p2, p3, p4, p5, p6, p7)
+            }
+        }.apply {
+            val mcThis = this as TestGenerics.Extendor<ArrayList<TestConcreteClass>>
+            mcThis.testBaseclassExtendor(expectedParam)
         }
     }
 
@@ -271,11 +322,11 @@ class TestBaseClasses {
     @Test
     fun testInterface() {
         //TODO
-        object : BaseTestInterface {
-
-        }.apply {
-
-        }
+//        object : BaseTestInterface {
+//
+//        }.apply {
+//
+//        }
     }
 
     @Test

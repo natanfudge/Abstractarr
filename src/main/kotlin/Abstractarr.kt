@@ -3,20 +3,22 @@ import abstractor.isMcClass
 import api.*
 import codegeneration.*
 import codegeneration.asm.AsmCodeGenerator
-import codegeneration.asm.toAsmAccess
-import descriptor.JvmPrimitiveType
-import descriptor.JvmType
-import descriptor.ObjectType
-import descriptor.ReturnDescriptor
-import metautils.api.readFromJar
-import metautils.signature.ArrayGenericType
-import metautils.signature.GenericReturnType
-import metautils.signature.GenericsPrimitiveType
-import metautils.signature.TypeArgumentDeclaration
-import signature.annotated
-import signature.noAnnotations
-import signature.toJvmType
-import util.*
+import metautils.codegeneration.asm.toAsmAccess
+import metautils.api.*
+import metautils.descriptor.JvmPrimitiveType
+import metautils.descriptor.JvmType
+import metautils.descriptor.ObjectType
+import metautils.descriptor.ReturnDescriptor
+import metautils.signature.*
+import metautils.util.*
+import metautils.signature.annotated
+import metautils.signature.noAnnotations
+import metautils.signature.toJvmQualifiedName
+import metautils.signature.toJvmType
+import util.createDirectory
+import util.deleteRecursively
+import util.exists
+import util.isDirectory
 import java.nio.file.Path
 
 
@@ -87,7 +89,8 @@ private fun listAllGeneratedClasses(
 private fun entryJustForAccess(access: ClassAccess, visibility: Visibility, isStatic: Boolean): ClassEntry {
     return ClassEntry(
         methods = setOf(), superInterfaces = listOf(), superClass = null,
-        access = access.toAsmAccess(visibility, isStatic)
+        access = access.toAsmAccess(visibility, isStatic),
+        name = QualifiedName.Empty
     )
 }
 
@@ -111,6 +114,8 @@ private data class ClassAbstractor(
     private val classApi: ClassApi,
     private val mcClasses: Map<QualifiedName, ClassApi>
 ) {
+    //    //TODO: more sophisticated filtration system
+//    private val bannedBaseclasses = listOf("net/minecraft/TestConcreteClass")
     fun abstractClass(outerClass: GeneratedClass?, destPath: Path?) {
         check(classApi.visibility == ClassVisibility.Public)
         createApiInterface(outerClass, destPath)
@@ -121,7 +126,20 @@ private data class ClassAbstractor(
     private fun apiClassName(outerClass: GeneratedClass?, nameMap: (QualifiedName) -> QualifiedName) =
         if (outerClass == null) nameMap(classApi.name) else classApi.name
 
+
+//    private fun getClosestNonMcSuperclass(): QualifiedName? = classApi.superClass
+//        ?.let {
+//            for (superType in index.getAllSuperClassesFromClassToObject(it.type.toJvmQualifiedName())) {
+//                if (!superType.isMcClassName()) return@let superType
+//            }
+//            null
+//        }
+
+
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
+        //TODO: more advanced filtration system (baseclasses need to be explcitly specified)
+        if (classApi.isInnerClass && !classApi.isStatic) return
+
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
         val mcClass = classApi.asType()
@@ -137,9 +155,15 @@ private data class ClassAbstractor(
             shortName = shortName.innermostClass(),
             typeArguments = baseClassTypeArguments(),
             superInterfaces = interfaces,
-            superClass = if (!classApi.isInterface && !metadata.fitToPublicApi) {
-                classApi.asRawType()/*.applyIf(metadata.fitToPublicApi) { it.remapToBaseClass() }*/
-            } else null,
+            superClass = when {
+                classApi.isInterface -> null
+                metadata.fitToPublicApi -> {
+//                    null
+                    getClosestNonMcSuperclass()
+//                     getClosestNonMcSuperclass()?.let {  }
+                }
+                else -> classApi.asRawType()
+            },
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
         ) { addBaseclassBody() }
 
@@ -197,36 +221,17 @@ private data class ClassAbstractor(
         }
     }
 
-//    private fun getSuperTypeInterface() = classApi.superClass?.let {
-//        when {
-//            it.isMcClass() -> it.remapToApiClass()
-//            it.satisfyingTypeBoundsIsImpossible() -> null
-//            else -> ClassGenericType(
-//                SuperTypedPackage,
-//                SimpleClassGenericType(
-//                    SuperTypedName,
-//                    TypeArgument.SpecificType(
-//                        /*if (it.containsMcClasses()) it.remapToApiClass().type else it.type*/ it.remapToApiClass().type,
-//                        wildcardType = null
-//                    ).singletonList()
-//                ).singletonList()
-//            ).noAnnotations()
-//        }
+
+//    private fun getAllSuperMethods(): List<ClassApi.Method> = index.getSuperTypesRecursively(classApi.name)
+//        .mapNotNull { superClassName ->
+//            val superClass = mcClasses[superClassName] ?: return@mapNotNull null
+//            superClass.methods.map {
+//                TODO("Replace with do while method")
+//            }
 //
-//    }
+////            TODO()
+//        }.flatten()
 
-
-//    // TODO: This will do for now. A proper solution will check if:
-//    // 1. This is used as a superclass in this context (this is already the case when this method is called)
-//    // 2. This is a non-mc class
-//    // 3. Any type arguments are bound by a type that contains themselves (e.g. T extends Enum<T>)
-//    // ALTERNATIVELY------- instead of generating a SuperTyped<> interfaces just add the cast method itself to the class
-//    // OR do some bytecode shenanigans if that works
-//    private fun JavaClassType.satisfyingTypeBoundsIsImpossible() = type.packageName == EnumPackage
-//            && type.classNameSegments[0].name == EnumName
-
-    private fun getAllSuperMethods(): List<ClassApi.Method> = index.getSuperTypesRecursively(classApi.name)
-        .mapNotNull { mcClasses[it]?.methods }.flatten()
 
     private fun GeneratedClass.addBaseclassBody() {
         for (method in classApi.methods) {
@@ -235,7 +240,7 @@ private data class ClassAbstractor(
             }
         }
 
-        val methodsIncludingSupers = classApi.methods + getAllSuperMethods()
+        val methodsIncludingSupers = classApi.methods + getAllSuperClassMinecraftMethods()
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
         for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
@@ -395,7 +400,7 @@ private data class ClassAbstractor(
         addMethod(
             methodInfo,
             name = method.name,
-            isFinal = false,
+            isFinal = method.isFinal && metadata.fitToPublicApi,
             isStatic = method.isStatic,
             isAbstract = false,
             returnType = returnType,
@@ -585,7 +590,7 @@ private data class ClassAbstractor(
                 name = "new" + innerClass.name.shortName.innermostClass(),
                 visibility = innerClass.visibility,
                 static = false,
-                final = false,
+                final = metadata.fitToPublicApi,
                 abstract = false,
                 returnType = constructedInnerClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
                     .copy(annotations = listOf(NotNullAnnotation)),
@@ -605,6 +610,7 @@ private data class ClassAbstractor(
             }
         }
     }
+
 
     private fun apiPassedParameters(method: ClassApi.Method): List<Pair<JvmType, Expression>> =
         method.parameters.map { (name, type) ->
@@ -664,16 +670,136 @@ private data class ClassAbstractor(
         }
     }
 
-//    private fun GenericType.andRemappedToMcClass() = listOf(this, this.remapToApiClass())
+////////// TYPE VARIABLE INLINING //////////
 
+//    class Foo<T> : Bar<String>()
+//    open class Bar<T1> {
+//        fun <T> bar(t1: T1, t: T) {}
+//    }
+
+    //TODO: fix type argument name conflicts
+
+    private fun getAllSuperClassMinecraftMethods(): List<ClassApi.Method> {
+        //  ClassApi(Foo)
+        var classApiOfCurrent: ClassApi = classApi
+
+        var currentSuperClass: JavaClassType
+
+        var methods = listOf<ClassApi.Method>()
+        while (true) {
+            // ClassApi(Foo<T>)
+            val currentSubClass = classApiOfCurrent
+            // Bar<String>
+            currentSuperClass = classApiOfCurrent.superClass ?: return methods
+            // ClassApi(Bar<T>)
+            // If it's null then it means we've reached a non-mc superclass
+            classApiOfCurrent = mcClasses[currentSuperClass.type.toJvmQualifiedName()] ?: return methods
+
+            // [<T> bar(t1: T1, t: T)]
+            val allMethodsBeforeInlining = (methods + classApiOfCurrent.methods)
+            // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
+            val allMethodsConflictsResolved = allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
+
+            // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
+            methods = allMethodsConflictsResolved
+                .map { it.inlineContainedTypes(currentSuperClass, classApiOfCurrent.typeArguments) }
+        }
+    }
+
+
+    // When a class has <T> defined, and the method defines a type argument <T>, rename <T> of the method to <T_OVERRIDE>
+    private fun ClassApi.Method.resolveTypeVariableNameConflicts(classApi: ClassApi): ClassApi.Method {
+        val conflictingNames = typeArguments.map { it.name }
+            .filter { methodArg -> classApi.typeArguments.any { it.name == methodArg } }
+        return mapTypeVariables {
+            if (it.name in conflictingNames) it.copy(name = it.name + ConflictingTypeVariableSuffix) else it
+        }.copy(typeArguments = typeArguments.map {
+            if (it.name in conflictingNames) it.copy(name = it.name + ConflictingTypeVariableSuffix) else it
+        })
+    }
+
+    // For cases when mc extends a non-mc class and implements some interface with it, we need to put in the dev
+// jar that the baseclass has that mc class as a super interface so that it doesn't seem like the methods were
+// not implemented.
+    private fun getClosestNonMcSuperclass(): JavaClassType? {
+        var classApiOfCurrent: ClassApi? = classApi
+        var current: JavaClassType? = null
+        do {
+            current = (classApiOfCurrent?.superClass ?: return null)
+                .let { superClass ->
+                    if (current != null) {
+                        // See comments for inlinePassedTypeArguments()
+                        // current = Bar<String,T>
+                        // classApiOfCurrent = ClassApi(Bar<T1,T2>)
+                        // superClass = ArrayList<T2>
+                        // superClassTypeArgs = <T1,T2>
+                        val superClassTypeArgs = classApiOfCurrent!!.typeArguments
+                        superClass.inlineTypeVariables(current!!, superClassTypeArgs)
+                    } else superClass
+                }
+
+            classApiOfCurrent = mcClasses[current!!.type.toJvmQualifiedName()]
+        } while (classApiOfCurrent != null)  // If it's null then it means we've reached a non-mc superclass
+
+        return current
+    }
+
+
+    // When taking class Foo<T> extends Bar<String, T>, and class Bar<T1,T2> extends ArrayList<T2>,
+    // it will convert ArrayList<T2> to ArrayList<T> so it can be used as a superclass of Foo<T>
+    // ArrayList<T2> is passed as `this`, Bar<String,T> is passed as first param and <T1,T2> is passed as second param.
+
+    // Complicated process, so in comments we visualize the values of variables in accordance to the example
+    private fun TypeVariable.inlineTypeVariable(
+        superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
+    ): GenericType {
+        // this = TypeVariable(T2)
+        // name = T2
+        // superClassTypeArgDecls = <T1,T2>
+        // indexOfOldName = 1
+        val indexOfOldName = superClassTypeArgDecls.indexOfFirst { it.name == name }
+        // If it's not defined in the superClassTypeArgDecls it means it was defined somewhere else like the subclass or in a method,
+        // which means there's no need to replace it with something else.
+        if (indexOfOldName == -1) return this
+
+        // innerMostClassPassedArgs = <String, T>
+        val innerMostClassPassedArgs = superClassType.type.classNameSegments.last().typeArguments!!
+        // inlinedVariableAsArgument = TypeArgument(T)
+        val inlinedVariableAsArgument = innerMostClassPassedArgs[indexOfOldName]
+        // You can't pass wildcards as a superclass type argument
+        check(inlinedVariableAsArgument is TypeArgument.SpecificType && inlinedVariableAsArgument.wildcardType == null)
+        // innerMostClassPassedArgs[indexOfOldName] = T
+        return inlinedVariableAsArgument.type
+    }
+
+    private fun <T : GenericReturnType> JavaType<T>.inlineTypeVariables(
+        superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
+    ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
+
+    //
+//    private fun TypeArgumentDeclaration.inlineTypeVariables(
+//        superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
+//    ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
+
+    private fun ClassApi.Method.mapTypeVariables(
+        mapper: (TypeVariable) -> GenericType
+    ) = copy(returnType = returnType.mapTypeVariables(mapper),
+        parameters = parameters.mapValues { it.value.mapTypeVariables(mapper) },
+        throws = throws.map { it.mapTypeVariables(mapper) },
+        typeArguments = typeArguments.map { it.mapTypeVariables(mapper) }
+    )
+
+    private fun ClassApi.Method.inlineContainedTypes(
+        superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
+    ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
 
 ////////// REMAPPING /////////
 
     private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
         with(metadata.versionPackage) { remapToApiClass() }
 
-    private fun <T : GenericReturnType> JavaType<T>.remapToBaseClass(): JavaType<T> =
-        with(metadata.versionPackage) { remapToBaseClass() }
+//    private fun <T : GenericReturnType> JavaType<T>.remapToBaseClass(): JavaType<T> =
+//        with(metadata.versionPackage) { remapToBaseClass() }
 
     private fun <T : GenericReturnType> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }
@@ -709,6 +835,7 @@ private data class ClassAbstractor(
     private fun AnyJavaType.isAssignableTo(otherType: AnyJavaType) = toJvmType().isAssignableTo(otherType.toJvmType())
 }
 
+private const val ConflictingTypeVariableSuffix = "_OVERRIDE"
 
 private val SuperTypedPackage = PackageName(listOf("febb", "apiruntime"))
 private const val SuperTypedName = "SuperTyped"

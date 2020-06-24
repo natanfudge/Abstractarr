@@ -120,7 +120,8 @@ fun ITestGenerics<ArrayList<ITestConcreteClass>, ArrayList<ITestConcreteClass>, 
         listOf(),
         listOf(ITestAbstractImpl.create(0, null)),
         mutableListOf(x),
-        listOf(1, 2, "3")
+        listOf(1, 2, "3"),
+        null
     )
 
     assertEquals(compareTo(null), 2)

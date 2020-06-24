@@ -1,11 +1,11 @@
 import api.*
+import metautils.api.JavaClassType
+import metautils.api.JavaType
+import metautils.api.getJvmDescriptor
+import metautils.api.isConstructor
 import metautils.signature.ArrayGenericType
 import metautils.signature.ClassGenericType
-import util.*
-
-
-
-
+import metautils.util.ClasspathIndex
 
 
 @Suppress("UNUSED_PARAMETER")
@@ -18,9 +18,9 @@ internal fun ClassApi.Method.isOverride(index: ClasspathIndex, owningClass : Cla
         index.getSuperTypesRecursively(owningClass.name)
             .any { index.classHasMethod(it, name, getJvmDescriptor()) }
 
-internal fun ClassApi.Method.isOverrideIgnoreReturnType(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
-        index.getSuperTypesRecursively(owningClass.name)
-            .any { index.classHasMethodIgnoringReturnType(it, name, getJvmDescriptor()) }
+//internal fun ClassApi.Method.isOverrideIgnoreReturnType(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
+//        index.getSuperTypesRecursively(owningClass.name)
+//            .any { index.classHasMethodIgnoringReturnType(it, name, getJvmDescriptor()) }
 
 // Since inner classes are converted to interfaces, they become static, so they must contain the type arguments of their outer classes
 // with them.
