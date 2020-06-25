@@ -111,6 +111,9 @@ private fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
     variant = if (origIsInterface) ClassVariant.Interface else ClassVariant.AbstractClass
 )
 
+//TODO: exceptions
+
+//TODO: consider whether usages of SAM should be shown as the baseclasses instead of the api interfaces
 
 private data class ClassAbstractor(
     private val metadata: AbstractionMetadata,
@@ -218,7 +221,8 @@ private data class ClassAbstractor(
             }
         }
 
-        val methodsIncludingSupers = classApi.methods + getAllSuperClassMinecraftMethods()
+//        val methodsIncludingSupers = classApi.methods + classApi.getAllSuperClassMinecraftMethods()
+        val methodsIncludingSupers = classApi.getAllMinecraftMethodsIncludingSupers()
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
         for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
@@ -231,18 +235,17 @@ private data class ClassAbstractor(
                 // it will be called in the api as well (without needing a bridge method)
                 if (containsMc) addBridgeMethod(method)
             }
-            if (method.isPublic) {
+            val addApiMethod = if (method.isPublic) {
                 // We need to add our own override to the method because we want the bridge method
                 // to call the mc method (with a super call) by default.
                 // If we don't add this method here to override the api method, it will call the method in the api interface,
                 // which will call the bridge method - infinite recursion.
                 // This override is not needed to be seen by the user.
-                if (!metadata.fitToPublicApi && !method.isStatic && containsMc) addApiDeclaredMethod(
-                    method,
-                    callSuper = true
-                )
-            }
-            if (method.isProtected) {
+
+                //TODO: if this works document it
+                if (metadata.fitToPublicApi) classApi.isSamInterface() && method.isAbstract
+                else !method.isStatic && containsMc
+            } else if (method.isProtected) {
                 // Multiple things to consider here.
                 // 1. In the implementation jar (fitToPublicApi = false), there's no need to add methods that don't contain
                 // mc classes, because when an api user calls a method without mc classes, the jvm will just look up
@@ -253,11 +256,12 @@ private data class ClassAbstractor(
                 // because it will be considered as an override for the mc declared method. (Which is not allowed for final methods)
                 // 2. In the api jar (fitToPublicApi = true), the mc methods are not seen by the user so we need to also add
                 // "containsMc = false" methods. There is no problem of overriding because it's not passed through a JVM verifier.
-                if (!metadata.fitToPublicApi) {
-                    if (containsMc) addApiDeclaredMethod(method, callSuper = true)
-                } else {
-                    addApiDeclaredMethod(method, callSuper = true)
-                }
+                if (!metadata.fitToPublicApi) containsMc
+                else true
+            } else false
+
+            if (addApiMethod) {
+                addApiDeclaredMethod(method, callSuper = true, forceBody = false)
             }
 
         }
@@ -291,7 +295,7 @@ private data class ClassAbstractor(
                     if (!method.isOverride(index, classApi)
                         || (metadata.fitToPublicApi && method.isOnlyImplementingOverride(index, classApi))
                     ) {
-                        addApiDeclaredMethod(method, callSuper = false)
+                        addApiDeclaredMethod(method, callSuper = false, forceBody = classApi.isSamInterface())
                     }
                 }
             }
@@ -366,14 +370,14 @@ private data class ClassAbstractor(
     }
 
 
-    private fun GeneratedClass.addApiDeclaredMethod(method: ClassApi.Method, callSuper: Boolean) {
+    private fun GeneratedClass.addApiDeclaredMethod(method: ClassApi.Method, callSuper: Boolean, forceBody: Boolean) {
 
         val mcReturnType = method.returnType
         val returnType = mcReturnType.remapToApiClass()
 
         val mcClassType = classApi.asRawType()
 
-        val noBody = metadata.fitToPublicApi && method.isAbstract
+        val noBody = metadata.fitToPublicApi && method.isAbstract && !forceBody
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
             if (noBody) return@apiMethodInfo
@@ -681,34 +685,49 @@ private data class ClassAbstractor(
 //        fun <T> bar(t1: T1, t: T) {}
 //    }
 
+    private fun ClassApi.getAllMinecraftMethodsIncludingSupers(): List<ClassApi.Method> {
+        val superTypes = superInterfaces.appendIfNotNull(superClass)
 
-    private fun getAllSuperClassMinecraftMethods(): List<ClassApi.Method> {
-        //  ClassApi(Foo)
-        var classApiOfCurrent: ClassApi = classApi
-
-        var currentSuperClass: JavaClassType
-
-        var methods = listOf<ClassApi.Method>()
-        while (true) {
-            // ClassApi(Foo<T>)
-            val currentSubClass = classApiOfCurrent
-            // Bar<String>
-            currentSuperClass = classApiOfCurrent.superClass ?: return methods
-            // ClassApi(Bar<T>)
-            // If it's null then it means we've reached a non-mc superclass
-            classApiOfCurrent = mcClasses[currentSuperClass.type.toJvmQualifiedName()] ?: return methods
-
-            // [<T> bar(t1: T1, t: T)]
-            val allMethodsBeforeInlining = (methods + classApiOfCurrent.methods)
-            // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
-            val allMethodsConflictsResolved =
-                allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
-
-            // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
-            methods = allMethodsConflictsResolved
-                .map { it.inlineContainedTypes(currentSuperClass, classApiOfCurrent.typeArguments) }
-        }
+        return this.methods +
+                superTypes.mapNotNull { superType -> mcClasses[superType.type.toJvmQualifiedName()]?.let { superType to it } }
+                    .flatMap { (superType, superTypeApi) ->
+                        // [<T> bar(t1: T1, t: T)]
+                        superTypeApi.getAllMinecraftMethodsIncludingSupers().map {
+                            // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
+                            it.resolveTypeVariableNameConflicts(this)
+                                // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
+                                .inlineContainedTypes(superType, superTypeApi.typeArguments)
+                        }
+                    }
     }
+
+//    private fun getAllSuperClassMinecraftMethods(): List<ClassApi.Method> {
+//        //  ClassApi(Foo)
+//        var classApiOfCurrent: ClassApi = classApi
+//
+//        var currentSuperClass: JavaClassType
+//
+//        var methods = listOf<ClassApi.Method>()
+//        while (true) {
+//            // ClassApi(Foo<T>)
+//            val currentSubClass = classApiOfCurrent
+//            // Bar<String>
+//            currentSuperClass = classApiOfCurrent.superClass ?: return methods
+//            // ClassApi(Bar<T>)
+//            // If it's null then it means we've reached a non-mc superclass
+//            classApiOfCurrent = mcClasses[currentSuperClass.type.toJvmQualifiedName()] ?: return methods
+//
+//            // [<T> bar(t1: T1, t: T)]
+//            val allMethodsBeforeInlining = (methods + classApiOfCurrent.methods)
+//            // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
+//            val allMethodsConflictsResolved =
+//                allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
+//
+//            // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
+//            methods = allMethodsConflictsResolved
+//                .map { it.inlineContainedTypes(currentSuperClass, classApiOfCurrent.typeArguments) }
+//        }
+//    }
 
 
     // When a class has <T> defined, and the method defines a type argument <T>, rename <T> of the method to <T_OVERRIDE>

@@ -14,24 +14,39 @@ class TestBaseClasses {
 
     @Test
     fun testAbstractClass(){
-        //TODO
-//        object: BaseTestAbstractClass(0, null){
-//            override fun abstractMethod(): ITestAbstractClass {
-//                TODO("Not yet implemented")
-//            }
-//
-//            override fun abstractMethodParam(p0: ITestConcreteClass?): ITestAbstractClass {
-//                TODO("Not yet implemented")
-//            }
-//
-//            override fun boz(p0: ITestOtherClass?): ITestOtherClass {
-//                TODO("Not yet implemented")
-//            }
-//
-//            override fun foo(): ITestInterface {
-//                TODO("Not yet implemented")
-//            }
-//        }
+        val e1 = ITestAbstractImpl.create(0,null)
+        val e2 = ITestAbstractImpl.create(1,null)
+        val e3 = ITestOtherClass.create()
+        val e4 = ITestAnnotations.create()
+        val e5 = ITestOtherClass.create()
+        object: BaseTestAbstractClass(0, null) {
+            override fun abstractMethod(): ITestAbstractClass {
+                return e1
+            }
+
+            override fun abstractMethodParam(p0: ITestConcreteClass?): ITestAbstractClass {
+                return e2
+            }
+
+            override fun boz(p0: ITestOtherClass?): ITestOtherClass {
+                return e3
+            }
+
+            override fun foo(): ITestInterface {
+                return e4
+            }
+
+            override fun baz(): ITestOtherClass {
+                return e5
+            }
+        }.apply {
+            this as TestAbstractClass
+            assertEquals(abstractMethod(), e1)
+            assertEquals(abstractMethodParam(null), e2)
+            assertEquals(boz(null), e3)
+            assertEquals(foo(), e4)
+            assertEquals(baz(), e5)
+        }
     }
 
     @Test
@@ -377,49 +392,40 @@ class TestBaseClasses {
         }
     }
 
-
-
     @Test
     fun testInterface() {
-        //TODO
-//        object : BaseTestInterface {
-//
-//        }.apply {
-//
-//        }
+        val e1 = ITestAbstractImpl.create(0,null)
+        val e2 = ITestOtherClass.create()
+        val e3 = ITestOtherClass.create()
+        object : BaseTestInterface {
+            override fun foo(): ITestInterface {
+                return e1
+            }
+
+            override fun boz(p0: ITestOtherClass?): ITestOtherClass {
+                return e2
+            }
+
+            override fun baz(): ITestOtherClass {
+                return e3
+            }
+        }.apply {
+            this as TestInterface
+            assertEquals(foo(), e1)
+            assertEquals(boz(null), e2)
+            assertEquals(baz(), e3)
+        }
     }
 
-//    public interface TestInterface {
-//    TestInterface foo();
-//
-//    default int bar() {
-//        return 2;
-//    }
-//
-//    default TestOtherClass baz() {
-//        return null;
-//    }
-//
-//    default TestOtherClass baz(TestOtherClass x) {
-//        return null;
-//    }
-//
-//    TestOtherClass boz(TestOtherClass x);
-//
-//    int x = 2;
-//
-//    public static void testStatic(){
-//
-//    }
-//
-//    public static void testStaticParam(TestOtherClass mc) {
-//
-//    }
-//}
+    fun foo(x : ITestLambdaInterface){
+
+    }
 
     //TODO: make sure you can't make lambdas of interfaces willy nilly (only baseclass)
     @Test
     fun testLambdaInterface() {
+        foo{null}
+        val x = BaseTestLambdaInterface {  }
         //TODO
 //        object : BaseTestLambdaInterface {
 //

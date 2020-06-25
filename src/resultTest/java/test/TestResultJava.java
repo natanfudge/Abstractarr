@@ -10,6 +10,8 @@ import java.util.ArrayList;
 
 public class TestResultJava {
 
+
+
     private static <T> void assertEquals(T actual, T expected) {
         org.junit.jupiter.api.Assertions.assertEquals(expected, actual);
     }
@@ -27,6 +29,21 @@ public class TestResultJava {
 
         assertEquals(obj.foo(), "123");
         assertEquals(asSuper.stream(), null);
+
+//        ITestLambdaInterface x = () -> null;
+//        BaseTestLambdaInterface y = () -> null;
+////        ITestLambdaInterface y =  new BaseTestLambdaInterface() {
+////            @Override
+////            public ITestLambdaInterface foo() {
+////                return null;
+////            }
+////        };
+//
+        foo(() -> null);
+    }
+
+    void foo(BaseTestLambdaInterface x){
+
     }
 
     @Test
