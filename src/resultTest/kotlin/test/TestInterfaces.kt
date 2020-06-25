@@ -180,8 +180,6 @@ fun ITestThrows.testThrowsCalls() {
 
 @Suppress("USELESS_IS_CHECK", "UNUSED_VARIABLE")
 class TestInterfaces {
-
-
     @Test
     fun testAbstractImpl() {
         println("Running testAbstractImpl test")

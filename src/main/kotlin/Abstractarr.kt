@@ -92,7 +92,7 @@ private fun listAllGeneratedClasses(
 
 private fun entryJustForAccess(access: ClassAccess, visibility: Visibility, isStatic: Boolean): ClassEntry {
     return ClassEntry(
-        methods = setOf(), superInterfaces = listOf(), superClass = null,
+        methods = mapOf(), superInterfaces = listOf(), superClass = null,
         access = access.toAsmAccess(visibility, isStatic),
         name = QualifiedName.Empty
     )
@@ -139,7 +139,8 @@ private data class ClassAbstractor(
 
         val interfaces = listOf(
             mcClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
-        ).applyIf(classApi.isInterface) { it + mcClass } + classApi.superInterfaces.remapToApiClasses()
+        ).applyIf(classApi.isInterface && !metadata.fitToPublicApi) { it + mcClass } +
+                classApi.superInterfaces.remapToApiClasses()
 
 
         val classInfo = ClassInfo(
@@ -150,11 +151,7 @@ private data class ClassAbstractor(
             superInterfaces = interfaces,
             superClass = when {
                 classApi.isInterface -> null
-                metadata.fitToPublicApi -> {
-//                    null
-                    getClosestNonMcSuperclass()
-//                     getClosestNonMcSuperclass()?.let {  }
-                }
+                metadata.fitToPublicApi -> getClosestNonMcSuperclass()
                 else -> classApi.asRawType()
             },
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
@@ -239,7 +236,11 @@ private data class ClassAbstractor(
                 // to call the mc method (with a super call) by default.
                 // If we don't add this method here to override the api method, it will call the method in the api interface,
                 // which will call the bridge method - infinite recursion.
-                if (!method.isStatic && containsMc) addApiDeclaredMethod(method, callSuper = true)
+                // This override is not needed to be seen by the user.
+                if (!metadata.fitToPublicApi && !method.isStatic && containsMc) addApiDeclaredMethod(
+                    method,
+                    callSuper = true
+                )
             }
             if (method.isProtected) {
                 // Multiple things to consider here.
@@ -285,8 +286,11 @@ private data class ClassAbstractor(
             if (method.isPublic) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
                 else {
-                    // Don't duplicate methods that are just being overriden
-                    if (!method.isOverride(index, classApi)) {
+                    // Don't duplicate methods that are just being overriden in the impl jar.
+                    // In the api jar we need to make it obvious there's no need to override that method yourself.
+                    if (!method.isOverride(index, classApi)
+                        || (metadata.fitToPublicApi && method.isOnlyImplementingOverride(index, classApi))
+                    ) {
                         addApiDeclaredMethod(method, callSuper = false)
                     }
                 }
@@ -369,7 +373,10 @@ private data class ClassAbstractor(
 
         val mcClassType = classApi.asRawType()
 
+        val noBody = metadata.fitToPublicApi && method.isAbstract
+
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
+            if (noBody) return@apiMethodInfo
             val call = MethodCall.Method(
                 receiver = when {
                     method.isStatic -> ClassReceiver(classApi.asJvmType())
@@ -399,7 +406,7 @@ private data class ClassAbstractor(
             name = method.name,
             isFinal = method.isFinal && metadata.fitToPublicApi,
             isStatic = method.isStatic,
-            isAbstract = false,
+            isAbstract = noBody,
             returnType = returnType,
             typeArguments = method.typeArguments.remapDeclToApiClasses()
         )

@@ -1,22 +1,30 @@
 import api.*
-import metautils.api.JavaClassType
-import metautils.api.JavaType
-import metautils.api.getJvmDescriptor
-import metautils.api.isConstructor
+import asm.opCode
+import metautils.api.*
 import metautils.signature.ArrayGenericType
 import metautils.signature.ClassGenericType
 import metautils.util.ClasspathIndex
+import org.objectweb.asm.Opcodes
 
 
 @Suppress("UNUSED_PARAMETER")
-internal fun doubleCastRequired(classApi: ClassApi) = false /*true*/ /*classApi.isFinal*/ // the rules seem too ambiguous
+internal fun doubleCastRequired(classApi: ClassApi) =
+    false /*true*/ /*classApi.isFinal*/ // the rules seem too ambiguous
 
 
-
-
-internal fun ClassApi.Method.isOverride(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
+internal fun ClassApi.Method.isOverride(index: ClasspathIndex, owningClass: ClassApi) = !isConstructor && !isStatic &&
         index.getSuperTypesRecursively(owningClass.name)
-            .any { index.classHasMethod(it, name, getJvmDescriptor()) }
+            .any { index.getMethod(it, name, getJvmDescriptor()) != null }
+
+internal fun ClassApi.Method.isOnlyImplementingOverride(index: ClasspathIndex, owningClass: ClassApi): Boolean {
+    if (isConstructor || isStatic || isAbstract) return false
+    val overriding = index.getSuperTypesRecursively(owningClass.name)
+        .mapNotNull { index.getMethod(it, name, getJvmDescriptor()) }
+    if (overriding.isEmpty()) return false
+    return overriding.all { it.access opCode Opcodes.ACC_ABSTRACT }
+}
+//    !isConstructor && !isStatic && index.getSuperTypesRecursively(owningClass.name)
+//            .any {classEntry -> index.getMethod(classEntry, name, getJvmDescriptor()).let { it != null && }   }
 
 //internal fun ClassApi.Method.isOverrideIgnoreReturnType(index: ClasspathIndex, owningClass : ClassApi) = !isConstructor && !isStatic &&
 //        index.getSuperTypesRecursively(owningClass.name)
