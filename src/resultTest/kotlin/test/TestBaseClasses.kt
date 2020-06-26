@@ -4,22 +4,24 @@ import net.minecraft.*
 import org.junit.jupiter.api.Test
 import testBaseclass
 import testBaseclassExtendor
+import testMcOnly
 import v1.net.minecraft.*
+import java.util.stream.Stream
 
 
-@Suppress("CAST_NEVER_SUCCEEDS")
+@Suppress("CAST_NEVER_SUCCEEDS", "UNCHECKED_CAST")
 class TestBaseClasses {
     private fun <T> assertEquals(actual: T, expected: T) = kotlin.test.assertEquals(expected, actual)
 
 
     @Test
-    fun testAbstractClass(){
-        val e1 = ITestAbstractImpl.create(0,null)
-        val e2 = ITestAbstractImpl.create(1,null)
+    fun testAbstractClass() {
+        val e1 = ITestAbstractImpl.create(0, null)
+        val e2 = ITestAbstractImpl.create(1, null)
         val e3 = ITestOtherClass.create()
         val e4 = ITestAnnotations.create()
         val e5 = ITestOtherClass.create()
-        object: BaseTestAbstractClass(0, null) {
+        object : BaseTestAbstractClass(0, null) {
             override fun abstractMethod(): ITestAbstractClass {
                 return e1
             }
@@ -355,6 +357,7 @@ class TestBaseClasses {
             init {
                 assertEquals(protectedStatic(), "SomeString")
             }
+
             override fun inheritedMethod(): Int {
                 return 5
             }
@@ -376,16 +379,16 @@ class TestBaseClasses {
             }
 
         }.apply {
-            assertEquals(inheritedField,"inherited")
+            assertEquals(inheritedField, "inherited")
             assertEquals(finalMethod(), 3)
             this as TestInnerExtender
-            assertEquals(inheritedMethod(),5)
+            assertEquals(inheritedMethod(), 5)
             assertEquals(overridenMethod(), 6)
 
             assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStatic(), 4)
-            assertEquals(publicInt(),7)
-            assertEquals(mutatesField(),8)
-            assertEquals(finalMethod(),3)
+            assertEquals(publicInt(), 7)
+            assertEquals(mutatesField(), 8)
+            assertEquals(finalMethod(), 3)
             normalMethod()
             assertEquals(x, 9)
 
@@ -394,7 +397,7 @@ class TestBaseClasses {
 
     @Test
     fun testInterface() {
-        val e1 = ITestAbstractImpl.create(0,null)
+        val e1 = ITestAbstractImpl.create(0, null)
         val e2 = ITestOtherClass.create()
         val e3 = ITestOtherClass.create()
         object : BaseTestInterface {
@@ -417,51 +420,76 @@ class TestBaseClasses {
         }
     }
 
-    fun foo(x : ITestLambdaInterface){
-
-    }
-
-    //TODO: make sure you can't make lambdas of interfaces willy nilly (only baseclass)
     @Test
     fun testLambdaInterface() {
-        foo{null}
-        val x = BaseTestLambdaInterface {  }
-        //TODO
-//        object : BaseTestLambdaInterface {
-//
-//        }.apply {
-//
-//        }
+        val e = BaseTestLambdaInterface { null }
+        BaseTestLambdaInterface { e }.apply {
+            this as TestLambdaInterface
+            assertEquals(foo(), e)
+        }
+        object : BaseTestLambdaInterface {
+            override fun foo(): ITestLambdaInterface {
+                return e
+            }
+        }.apply {
+            this as TestLambdaInterface
+            assertEquals(foo(), e)
+        }
     }
 
 
     @Test
     fun testNormalClassExtender() {
-        //TODO
         object : BaseTestNormalClassExtender() {
 
         }.apply {
             testNormalClassExtenderCalls()
         }
 
-        object : BaseTestNormalClassExtender() {
+        val e = listOf(ITestOtherClass.create()).stream()
 
+        object : BaseTestNormalClassExtenderWithMcGeneric() {
+            override fun foo(): String {
+                return "override"
+            }
+
+            override fun isEmpty(): Boolean {
+                return false
+            }
+
+            override fun stream(): Stream<ITestOtherClass> {
+                return  e
+            }
         }.apply {
+            this as TestNormalClassExtenderWithMcGeneric
+            testMcOnly(e as Stream<TestOtherClass>)
+            assertEquals(foo(), "override")
         }
     }
 
     @Test
     fun testOverload() {
-        //TODO
+
         object : BaseTestOverload() {
 
         }.apply {
             testOverloadCalls()
         }
 
+        var called = false
         object : BaseTestOverload() {
+            override fun x() {
+                called = true
+            }
 
+            override fun x(p0: Int) {
+                assertEquals(p0,10)
+            }
         }.apply {
+            this as TestOverload
+            x()
+            x(10)
+            assertEquals(called,true)
         }
     }
 
@@ -474,9 +502,27 @@ class TestBaseClasses {
             testOtherClassCalls()
         }
 
-        object : BaseTestOtherClass() {
+        val e1 = ITestConcreteClass.create()
+        val e2 = ITestConcreteClass.create()
+        val e3 = ITestFinalClass.create(null)
 
+        object : BaseTestOtherClass() {
+            override fun oneCastTest(p0: ITestConcreteClass?) {
+                assertEquals(p0,e1)
+            }
+
+            override fun twoCastTest(p0: ITestConcreteClass?) {
+                assertEquals(p0,e2)
+            }
+
+            override fun realFinalCastTest(p0: ITestFinalClass?) {
+                assertEquals(p0,e3)
+            }
         }.apply {
+            this as TestOtherClass
+            oneCastTest(e1)
+            twoCastTest(e2)
+            realFinalCastTest(e3)
         }
 
     }

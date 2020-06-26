@@ -33,7 +33,7 @@ data class AbstractionMetadata(
 //TODO: add tests for protected methods
 
 
-//TODO: for parameter names and docs, generate a java source alongside the asm source.
+//TODO: for parameter names and docs and line numbers, use forgedflower?
 
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
@@ -154,7 +154,7 @@ private data class ClassAbstractor(
             superInterfaces = interfaces,
             superClass = when {
                 classApi.isInterface -> null
-                metadata.fitToPublicApi -> getClosestNonMcSuperclass()
+                metadata.fitToPublicApi -> getClosestNonMcSuperclass()?.remapToApiClass()
                 else -> classApi.asRawType()
             },
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...

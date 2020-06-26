@@ -1,8 +1,7 @@
-import net.minecraft.TestAbstractClass
-import net.minecraft.TestConcreteClass
-import net.minecraft.TestGenerics
-import net.minecraft.TestOtherClass
+import net.minecraft.*
 import org.junit.jupiter.api.Test
+import java.util.stream.Stream
+import kotlin.test.assertEquals
 
 //@Test
 //fun testMcOnly() {
@@ -18,4 +17,8 @@ List<ArrayList<TestConcreteClass>>, Int>.testBaseclass(eParam : List<String>){
 fun TestGenerics.Extendor<ArrayList<TestConcreteClass>>.testBaseclassExtendor(eParam : TestOtherClass){
     genericMethod<ArrayList<TestConcreteClass>>(null,null,null,
         listOf<TestAbstractClass>(),null, null,null, eParam)
+}
+
+fun TestNormalClassExtenderWithMcGeneric.testMcOnly(e: Stream<TestOtherClass>){
+    assertEquals(e, stream())
 }
