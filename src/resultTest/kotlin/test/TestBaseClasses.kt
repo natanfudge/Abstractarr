@@ -495,7 +495,6 @@ class TestBaseClasses {
 
     @Test
     fun testOtherClass() {
-        //TODO
         object : BaseTestOtherClass() {
 
         }.apply {
@@ -529,59 +528,120 @@ class TestBaseClasses {
 
     @Test
     fun testOverrideReturnTypeChange() {
-        //TODO
         object : BaseTestOverrideReturnTypeChange() {
 
         }.apply {
             testOverrideReturnTypeChangeCalls()
         }
 
+        val e1 = mutableListOf<Any?>()
+        val e2 = arrayListOf<ITestOtherClass>()
+        val e3 = ITestAbstractImpl.create(0,null)
         object : BaseTestOverrideReturnTypeChange() {
+            override fun foo(): MutableList<Any?> {
+                return e1
+            }
 
+            override fun bar(): java.util.ArrayList<ITestOtherClass> {
+                return e2
+            }
+
+            override fun mcClass(): ITestAbstractImpl {
+                return e3
+            }
         }.apply {
+            val x = this as TestOverrideReturnTypeChange
+            assertEquals(foo(), e1)
+            assertEquals(x.bar(), e2)
+            assertEquals(mcClass(), e3)
         }
 
     }
 
     @Test
     fun testOverrideReturnTypeChangeSuper() {
-        //TODO
         object : TestOverrideReturnTypeChangeSuper() {
 
         }.apply {
             testOverrideReturnTypeChangeSuperCalls()
         }
 
-        object : TestOverrideReturnTypeChangeSuper() {
+        val e1 = mutableListOf<Any?>()
+        val e2 = arrayListOf<ITestOtherClass>()
+        val e3 = ITestAbstractImpl.create(0,null)
+        object : BaseTestOverrideReturnTypeChangeSuper() {
+            override fun foo(): Any {
+                return e1
+            }
 
+            override fun bar(): MutableList<ITestOtherClass> {
+                return e2
+            }
+
+            override fun mcClass(): ITestAbstractClass {
+                return e3
+            }
         }.apply {
+            val x = this as TestOverrideReturnTypeChangeSuper
+            assertEquals(foo(), e1)
+            assertEquals(x.bar(), e2)
+            assertEquals(mcClass(), e3)
         }
     }
 
 
     @Test
     fun testSuperClass() {
-        //TODO
         object : BaseTestSuperClass(null) {
+            override fun inheritedMethod(): Int {
+                return 40
+            }
 
+            override fun overridenMethod(): Int {
+                return 50
+            }
         }.apply {
-
+            this as TestSuperClass
+            assertEquals(inheritedField,"inherited")
+            assertEquals(inheritedMethod(),40)
+            assertEquals(overridenMethod(), 50)
         }
     }
+
 
     @Test
     fun testThrows() {
         try {
-            //TODO: (needs to have throws in baseclasses...)
             object : BaseTestThrows() {
 
             }.apply {
                 testThrowsCalls()
             }
 
-            object : BaseTestThrows() {
+            var called1 = false
+            var called2 = false
+            var called3 = false
 
+            object : BaseTestThrows() {
+                override fun foo() {
+                    called1 = true
+                }
+
+                override fun checked() {
+                    called2 = true
+                }
+
+                override fun <T : Throwable?> bar() {
+                    called3 = true
+                }
             }.apply {
+                this as TestThrows
+                foo()
+                checked()
+                bar<Throwable>()
+                assertEquals(called1,true)
+                assertEquals(called2,true)
+                assertEquals(called3,true)
             }
 
         } catch (e: Exception) {
@@ -589,6 +649,7 @@ class TestBaseClasses {
         }
 
     }
+    //TODO: tests for protected, and tests for minecraft exceptions
 
 
 }
