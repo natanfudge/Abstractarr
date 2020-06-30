@@ -589,6 +589,91 @@ class TestBaseClasses {
         }
     }
 
+    @Test
+    fun testProtected() {
+        var c1 = false
+        var c2 = false
+
+        object : BaseTestProtected() {
+            init {
+                assertEquals(constant,"constant")
+                assertEquals(getStaticField(),"static")
+                setStaticField("bar")
+                assertEquals(getStaticField(),"bar")
+                assertEquals(instanceFinal,"instanceFinal")
+                assertEquals(instance,"instance")
+                instance = "foo"
+                assertEquals(instance,"foo")
+
+                fooNoMc()
+                assertEquals(c1,true)
+                fooMc(ITestOtherClass.create())
+                assertEquals(c2,true)
+
+                staticNoMc()
+                staticMc(ITestOtherClass.create())
+                fooNoMcFinal()
+                fooMcFinal(ITestOtherClass.create())
+
+            }
+
+            override fun fooNoMc() {
+                c1 = true
+            }
+
+            override fun fooMc(p0: ITestOtherClass?) {
+                c2 = true
+            }
+        }
+
+    }
+
+    @Test
+    fun testProtectedSub() {
+        var c1 = false
+        var c2 = false
+        var c3 = false
+
+        object : BaseTestProtectedSub(){
+            init {
+                assertEquals(constant,"constant")
+                assertEquals(getStaticField(),"static")
+                setStaticField("bar")
+                assertEquals(getStaticField(),"bar")
+                assertEquals(instanceFinal,"instanceFinal")
+                assertEquals(instance,"instance")
+                instance = "foo"
+                assertEquals(instance,"foo")
+
+                fooNoMc()
+                assertEquals(c1,true)
+                fooMc(ITestOtherClass.create())
+                assertEquals(c2,true)
+                newMethod(ITestOtherClass.create())
+                assertEquals(c3, true)
+
+                staticNoMc()
+                staticMc(ITestOtherClass.create())
+                fooNoMcFinal()
+                fooMcFinal(ITestOtherClass.create())
+            }
+
+            override fun fooNoMc() {
+                c1 = true
+            }
+
+            override fun fooMc(p0: ITestOtherClass?) {
+                c2 = true
+            }
+
+            override fun newMethod(p0: ITestOtherClass?) {
+                c3 = true
+            }
+        }.apply {
+
+        }
+
+    }
 
     @Test
     fun testSuperClass() {

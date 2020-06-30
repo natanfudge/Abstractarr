@@ -31,8 +31,9 @@ public class TestProtected {
         protected void bar(){
 
         }
-        void foo() {
+        public void foo() {
         }
+        void packagePrivateThing(){}
     }
 
     protected class NonStaticInner {

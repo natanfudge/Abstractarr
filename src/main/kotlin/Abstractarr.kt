@@ -134,7 +134,8 @@ private data class ClassAbstractor(
 
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         //TODO: more advanced filtration system (baseclasses need to be explcitly specified)
-        if (classApi.isInnerClass && !classApi.isStatic) return
+        // (inner baseclasses are not supported)
+        if (classApi.isInnerClass && (!classApi.isStatic || classApi.isProtected)) return
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
@@ -235,17 +236,7 @@ private data class ClassAbstractor(
                 // it will be called in the api as well (without needing a bridge method)
                 if (containsMc) addBridgeMethod(method)
             }
-            val addApiMethod = if (method.isPublic) {
-                // We need to add our own override to the method because we want the bridge method
-                // to call the mc method (with a super call) by default.
-                // If we don't add this method here to override the api method, it will call the method in the api interface,
-                // which will call the bridge method - infinite recursion.
-                // This override is not needed to be seen by the user.
-
-                //TODO: if this works document it
-                if (metadata.fitToPublicApi) classApi.isSamInterface() && method.isAbstract
-                else !method.isStatic && containsMc
-            } else if (method.isProtected) {
+            val addApiMethod = if (method.isProtected || (method.isPublic && classApi.isProtected)) {
                 // Multiple things to consider here.
                 // 1. In the implementation jar (fitToPublicApi = false), there's no need to add methods that don't contain
                 // mc classes, because when an api user calls a method without mc classes, the jvm will just look up
@@ -258,6 +249,17 @@ private data class ClassAbstractor(
                 // "containsMc = false" methods. There is no problem of overriding because it's not passed through a JVM verifier.
                 if (!metadata.fitToPublicApi) containsMc
                 else true
+            } else if (method.isPublic) {
+                // We need to add our own override to the method because we want the bridge method
+                // to call the mc method (with a super call) by default.
+                // If we don't add this method here to override the api method, it will call the method in the api interface,
+                // which will call the bridge method - infinite recursion.
+                // This override is not needed to be seen by the user.
+
+                // We want to avoid users creating lambdas of api interfaces because they are not meant to be implemented, and make them make lambdas of the baseclasses instead.
+                // So when the class is a SAM Interface, we make the api interface not have a single abstract method, and we make the baseclass have a single abstract method.
+                if (metadata.fitToPublicApi) classApi.isSamInterface() && method.isAbstract
+                else !method.isStatic && containsMc
             } else false
 
             if (addApiMethod) {
@@ -275,10 +277,11 @@ private data class ClassAbstractor(
                 copy(classApi = innerClass).createBaseclass(destPath = null, outerClass = this)
             }
 
-            // Inner classes are constructed by their parent
-            if (!innerClass.isStatic && innerClass.isProtected) {
-                addInnerClassConstructor(innerClass)
-            }
+            // soft to do: make it possible to construct protected inner classes somehow, right
+            // now it will run into access errors
+//            if (!innerClass.isStatic && innerClass.isProtected) {
+//                addInnerClassConstructor(innerClass)
+//            }
         }
 
         if (classApi.isProtected) addArrayFactory()
