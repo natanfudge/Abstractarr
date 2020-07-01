@@ -1,13 +1,15 @@
 import abstractor.VersionPackage
 import asm.readToClassNode
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonConfiguration
 import org.junit.jupiter.api.Test
 import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
 import metautils.testing.getResource
-import metautils.testing.verifyClassFiles
-import util.*
+import metautils.util.*
 import java.io.PrintWriter
-import java.net.URLClassLoader
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -28,18 +30,24 @@ class TestAbstraction {
         val apiDest = mcJar.parent.resolve("abstractedAsmApi")
 
 
-
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
             classPath = listOf(), fitToPublicApi = false, writeRawAsm = true
         )
         Abstractor.abstract(mcJar, implDest, metadata = metadata)
-        Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
+        val manifest = Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
+        val manifestJson = Json(
+            JsonConfiguration(prettyPrint = true)
+        ).stringify(
+            MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
+            manifest
+        )
+        Paths.get("testdata").createDirectories()
+        Paths.get("testdata/abstractionManifest.json").writeString(manifestJson)
 
 
         implDest.convertDirToJar()
         implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
-        verifyClassFiles(implDest, classpath = listOf(Paths.get("testdata/mcJarWithInterfaces.jar")))
 
         apiDest.convertDirToJar()
 

@@ -3,6 +3,7 @@ import abstractor.isMcClass
 import api.*
 import codegeneration.*
 import codegeneration.asm.AsmCodeGenerator
+import kotlinx.serialization.Serializable
 import metautils.codegeneration.asm.toAsmAccess
 import metautils.api.*
 import metautils.codegeneration.*
@@ -16,10 +17,10 @@ import metautils.signature.annotated
 import metautils.signature.noAnnotations
 import metautils.signature.toJvmQualifiedName
 import metautils.signature.toJvmType
-import util.createDirectory
-import util.deleteRecursively
-import util.exists
-import util.isDirectory
+import metautils.util.createDirectory
+import metautils.util.deleteRecursively
+import metautils.util.exists
+import metautils.util.isDirectory
 import java.nio.file.Path
 
 
@@ -29,6 +30,14 @@ data class AbstractionMetadata(
     val fitToPublicApi: Boolean,
     val writeRawAsm: Boolean
 )
+/** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
+typealias AbstractionManifest = Map<String, AbstractedClassInfo>
+
+@Serializable
+data class AbstractedClassInfo(val apiClassName: String, val isThrowable: Boolean, val newSignature: String)
+
+//data class AbstractionManifest(val )
+//data class AbstractionResult()
 
 //TODO: release meta-utils snapshots for buildSrc -> make throwables extend the superexception instead of the original exception and an interface
 
@@ -36,7 +45,7 @@ data class AbstractionMetadata(
 //TODO: for parameter names and docs and line numbers, use forgedflower?
 
 object Abstractor {
-    fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata) {
+    fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata): AbstractionManifest {
         require(destDir.parent.exists()) { "The chosen destination path '$destDir' is not in any existing directory." }
         require(destDir.parent.isDirectory()) { "The parent of the chosen destination path '$destDir' is not a directory." }
 
@@ -55,19 +64,43 @@ object Abstractor {
 
         val index = indexClasspath(metadata.classPath + listOf(mcJar), additionalEntries)
 
-
-
-        for (classApi in classes
-//            .filter { it.name.shortName.startsWith("TestOverrideReturnTypeChange") }
-        ) {
+        for (classApi in classes) {
             if (!classApi.isPublicApi) continue
             ClassAbstractor(metadata, index, classApi, classNamesToClasses).abstractClass(
                 destPath = destDir
             )
         }
+        return buildAbstractionManifest(classes, index, metadata.versionPackage)
     }
 
 
+}
+
+
+private fun buildAbstractionManifest(
+    classes: Collection<ClassApi>,
+    index: ClasspathIndex,
+    version: VersionPackage
+): AbstractionManifest = with(version) {
+    classes.flatMap { outerClass ->
+        outerClass.allInnerClassesAndThis().map { mcClass ->
+            val mcClassName = mcClass.name.toSlashQualifiedString()
+            val apiClass = mcClass.name.toApiClass()
+            val isThrowable = mcClass.isThrowable(index)
+            val oldSignature = mcClass.getSignature()
+            val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
+                name = apiClass,
+                typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
+            )
+
+            val newSignature = if (isThrowable) oldSignature.copy(superClass = insertedApiClass)
+            else oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
+            mcClassName to AbstractedClassInfo(
+                apiClassName = apiClass.toSlashQualifiedString(),
+                isThrowable = isThrowable, newSignature = newSignature.toClassfileName()
+            )
+        }
+    }.toMap()
 }
 
 // We don't list exception superclasses, hopefully they won't be needed
@@ -333,7 +366,7 @@ private data class ClassAbstractor(
     }
 
     private fun GeneratedClass.addApiInterfaceBody() {
-       if(!classApi.isThrowable(index)) addAsSuperMethod()
+        if (!classApi.isThrowable(index)) addAsSuperMethod()
         for (method in classApi.methods) {
             if (method.isPublic) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
@@ -706,10 +739,6 @@ private data class ClassAbstractor(
                 && method.parameters.values.first().type.let { it == GenericsPrimitiveType.Int }
     }
 
-    internal fun allApiInterfaceTypeArguments(): List<TypeArgumentDeclaration> = when {
-        classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
-        else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
-    }
 
     private fun baseClassTypeArguments(): List<TypeArgumentDeclaration> {
         return classApi.typeArguments.map { typeArg ->
@@ -864,6 +893,10 @@ private data class ClassAbstractor(
         superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
     ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
 
+    private fun allApiInterfaceTypeArguments() = with(metadata.versionPackage) {
+        allApiInterfaceTypeArguments(classApi)
+    }
+
 ////////// REMAPPING /////////
 
     private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
@@ -904,6 +937,11 @@ private data class ClassAbstractor(
 
     // When assigning types, only the underlying JvmType matters
     private fun AnyJavaType.isAssignableTo(otherType: AnyJavaType) = toJvmType().isAssignableTo(otherType.toJvmType())
+}
+
+internal fun VersionPackage.allApiInterfaceTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
+    classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
+    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
 }
 
 private const val ConflictingTypeVariableSuffix = "_OVERRIDE"

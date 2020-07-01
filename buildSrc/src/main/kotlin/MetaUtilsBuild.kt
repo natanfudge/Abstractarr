@@ -2,6 +2,12 @@ import abstractor.VersionPackage
 import api.ClassApi
 import asm.readToClassNode
 import asm.writeTo
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonConfiguration
+import metautils.api.isThrowable
 import metautils.api.outerClassesToThis
 import metautils.api.readFromList
 import metautils.api.visitThisAndInnerClasses
@@ -19,6 +25,8 @@ import util.createDirectories
 import util.isDirectory
 import util.recursiveChildren
 import java.io.File
+import java.nio.charset.Charset
+import java.nio.file.Files
 import java.nio.file.Path
 
 
@@ -28,11 +36,11 @@ class MetaUtils : Plugin<Project> {
     }
 }
 
-private fun ClassApi.getSignature() : ClassSignature = ClassSignature(
-    typeArguments,
-    superClass?.type ?: JavaLangObjectGenericType,
-    superInterfaces.map { it.type }
-)
+/** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
+//typealias AbstractionManifest = Map<String, AbstractedClassInfo>
+
+@Serializable
+data class AbstractedClassInfo(val apiClassName: String, val isThrowable: Boolean, val newSignature: String)
 
 open class BuildMetaUtilsExtension(private val project: Project) {
     fun createJarTest(name: String): SourceSet = with(project) {
@@ -53,6 +61,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
         return@with sourceSet
     }
 
+
     fun createAttachInterfacesTask(targetClassDirs: Set<File>): FileCollection = with(project) {
         val targetClassDir = targetClassDirs.first { it.parentFile.name == "java" }
         val targetClassPath = targetClassDir.toPath()
@@ -61,42 +70,40 @@ open class BuildMetaUtilsExtension(private val project: Project) {
             task.doLast {
                 val inputChildren = targetClassPath.recursiveChildren()
                 val allInputs = inputChildren.filter { !it.isDirectory() }.toList()
-                val inputsParsed = ClassApi.readFromList(allInputs, rootPath = targetClassPath)
-                    .matchToPaths(rootPath = targetClassPath)
                 val outputDir = project.file("testdata/mcJarWithInterfaces").toPath()
+                val abstractionManifestFile = project.file("testdata/abstractionManifest.json").toPath()
+                val abstractionManifest = Json(JsonConfiguration.Stable).parse(
+                    MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
+                    Files.readAllBytes(abstractionManifestFile).toString(Charset.defaultCharset())
+                )
+
                 val outputsToInputs = allInputs.associateBy { path ->
                     val relativePath = targetClassPath.relativize(path).toString()
                     outputDir.resolve(relativePath)
                 }
-                with(VersionPackage("v1")) {
-                    for ((output, input) in outputsToInputs) {
-                        val classNode = readToClassNode(input)
-                        check(classNode.name.startsWith("net/minecraft/"))
-                        val parsedClass = inputsParsed[input]
+                for ((output, input) in outputsToInputs) {
+                    val classNode = readToClassNode(input)
+                    check(classNode.name.startsWith("net/minecraft/"))
 
-                        if (parsedClass != null) {
-                            val newName = parsedClass.name.toApiClass().toSlashQualifiedString()
+                    val abstractionEntry = abstractionManifest[classNode.name]
+                    if (abstractionEntry != null) {
+                        val newName = abstractionEntry.apiClassName
+                        if (abstractionEntry.isThrowable) {
+                            println("Replacing superclass of ${classNode.name} from ${classNode.superName} to $newName")
+                            classNode.superName = newName
+                        } else {
                             println("Attaching interface $newName to ${classNode.name}")
                             classNode.interfaces.add(newName)
-
-                            if (classNode.signature != null) {
-                                val signature = parsedClass.getSignature()
-                                val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
-                                    name = parsedClass.name.toApiClass(),
-                                    typeArgs = allApiClassTypeArguments(parsedClass).toTypeArgumentsOfNames()
-                                )
-                                //TODO: throwable handling
-                                val newSignature = signature.copy(
-                                    superInterfaces = signature.superInterfaces + insertedApiClass
-                                )
-                                classNode.signature = newSignature.toClassfileName()
-                            }
                         }
-
-                        output.parent.createDirectories()
-
-                        classNode.writeTo(output)
+                        if (classNode.signature != null) {
+                            classNode.signature = abstractionEntry.newSignature
+                        }
                     }
+
+
+                    output.parent.createDirectories()
+
+                    classNode.writeTo(output)
                 }
 
 
@@ -111,22 +118,22 @@ open class BuildMetaUtilsExtension(private val project: Project) {
 
 }
 
-private fun Collection<ClassApi>.matchToPaths(rootPath: Path): Map<Path, ClassApi> =
-    mutableMapOf<Path, ClassApi>().apply {
-        for (topLevelClass in this@matchToPaths) {
-            topLevelClass.visitThisAndInnerClasses { classApi ->
-                val path = rootPath.resolve(classApi.name.packageName.toPath())
-                    .resolve(classApi.name.shortName.toDollarQualifiedString() + ".class")
-                put(path, classApi)
-            }
-        }
-    }
-
-
-private fun VersionPackage.allApiClassTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
-    classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
-    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
-}
+//private fun Collection<ClassApi>.matchToPaths(rootPath: Path): Map<Path, ClassApi> =
+//    mutableMapOf<Path, ClassApi>().apply {
+//        for (topLevelClass in this@matchToPaths) {
+//            topLevelClass.visitThisAndInnerClasses { classApi ->
+//                val path = rootPath.resolve(classApi.name.packageName.toPath())
+//                    .resolve(classApi.name.shortName.toDollarQualifiedString() + ".class")
+//                put(path, classApi)
+//            }
+//        }
+//    }
+//
+//
+//private fun VersionPackage.allApiClassTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
+//    classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
+//    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
+//}
 
 private val Project.sourceSets: SourceSetContainer
     get() = convention.getPlugin(JavaPluginConvention::class.java).sourceSets

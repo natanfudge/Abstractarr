@@ -1,4 +1,4 @@
-import util.directChildren
+import metautils.util.directChildren
 import java.nio.file.Paths
 
 fun main() {
