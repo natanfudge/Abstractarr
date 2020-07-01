@@ -4,13 +4,16 @@ plugins {
 }
 repositories {
     mavenCentral()
+    maven {
+        url  "https://dl.bintray.com/natanfudge/libs"
+    }
 }
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation gradleApi()
     implementation("org.ow2.asm:asm:8.0.1")
     implementation 'org.ow2.asm:asm-tree:8.0.1'
-//    implementation("io.github.febb:MetaUtils:1.0-SNAPSHOT")
+    implementation("io.github.febb:metautils:0.1.0")
 }
 group 'io.github.febb'
 version '1.0-SNAPSHOT'

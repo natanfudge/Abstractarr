@@ -1,7 +1,12 @@
 import abstractor.VersionPackage
-import api.*
+import api.ClassApi
 import asm.readToClassNode
 import asm.writeTo
+import metautils.api.outerClassesToThis
+import metautils.api.readFromList
+import metautils.api.visitThisAndInnerClasses
+import metautils.signature.*
+import metautils.util.toPath
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.FileCollection
@@ -9,8 +14,10 @@ import org.gradle.api.plugins.JavaPluginConvention
 import org.gradle.api.tasks.SourceSet
 import org.gradle.api.tasks.SourceSetContainer
 import org.gradle.api.tasks.bundling.Jar
-import signature.*
-import util.*
+import util.convertDirToJar
+import util.createDirectories
+import util.isDirectory
+import util.recursiveChildren
 import java.io.File
 import java.nio.file.Path
 
@@ -21,9 +28,15 @@ class MetaUtils : Plugin<Project> {
     }
 }
 
+private fun ClassApi.getSignature() : ClassSignature = ClassSignature(
+    typeArguments,
+    superClass?.type ?: JavaLangObjectGenericType,
+    superInterfaces.map { it.type }
+)
 
 open class BuildMetaUtilsExtension(private val project: Project) {
     fun createJarTest(name: String): SourceSet = with(project) {
+
         val sourceSet = sourceSets.create(name)
         val jarTask = tasks.create(name, Jar::class.java) { task ->
             group = "testing"
@@ -62,18 +75,19 @@ open class BuildMetaUtilsExtension(private val project: Project) {
                         val parsedClass = inputsParsed[input]
 
                         if (parsedClass != null) {
-                            val newName = classNode.name.remapToApiClass()
+                            val newName = parsedClass.name.toApiClass().toSlashQualifiedString()
                             println("Attaching interface $newName to ${classNode.name}")
                             classNode.interfaces.add(newName)
 
                             if (classNode.signature != null) {
-                                val signature = ClassSignature.readFrom(classNode.signature)
-                                val insertedInterface = ClassGenericType.fromNameAndTypeArgs(
+                                val signature = parsedClass.getSignature()
+                                val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
                                     name = parsedClass.name.toApiClass(),
                                     typeArgs = allApiClassTypeArguments(parsedClass).toTypeArgumentsOfNames()
                                 )
+                                //TODO: throwable handling
                                 val newSignature = signature.copy(
-                                    superInterfaces = signature.superInterfaces + insertedInterface
+                                    superInterfaces = signature.superInterfaces + insertedApiClass
                                 )
                                 classNode.signature = newSignature.toClassfileName()
                             }
@@ -100,7 +114,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
 private fun Collection<ClassApi>.matchToPaths(rootPath: Path): Map<Path, ClassApi> =
     mutableMapOf<Path, ClassApi>().apply {
         for (topLevelClass in this@matchToPaths) {
-            topLevelClass.visitClasses { classApi ->
+            topLevelClass.visitThisAndInnerClasses { classApi ->
                 val path = rootPath.resolve(classApi.name.packageName.toPath())
                     .resolve(classApi.name.shortName.toDollarQualifiedString() + ".class")
                 put(path, classApi)
@@ -111,7 +125,7 @@ private fun Collection<ClassApi>.matchToPaths(rootPath: Path): Map<Path, ClassAp
 
 private fun VersionPackage.allApiClassTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
     classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
-    else -> classApi.listInnerClassChain().flatMap { it.typeArguments.remapDeclToApiClasses() }
+    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
 }
 
 private val Project.sourceSets: SourceSetContainer
