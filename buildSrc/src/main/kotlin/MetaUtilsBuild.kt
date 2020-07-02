@@ -40,7 +40,7 @@ class MetaUtils : Plugin<Project> {
 //typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 
 @Serializable
-data class AbstractedClassInfo(val apiClassName: String, val isThrowable: Boolean, val newSignature: String)
+data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean, */val newSignature: String)
 
 open class BuildMetaUtilsExtension(private val project: Project) {
     fun createJarTest(name: String): SourceSet = with(project) {
@@ -88,13 +88,13 @@ open class BuildMetaUtilsExtension(private val project: Project) {
                     val abstractionEntry = abstractionManifest[classNode.name]
                     if (abstractionEntry != null) {
                         val newName = abstractionEntry.apiClassName
-                        if (abstractionEntry.isThrowable) {
-                            println("Replacing superclass of ${classNode.name} from ${classNode.superName} to $newName")
-                            classNode.superName = newName
-                        } else {
+//                        if (abstractionEntry.isThrowable) {
+//                            println("Replacing superclass of ${classNode.name} from ${classNode.superName} to $newName")
+//                            classNode.superName = newName
+//                        } else {
                             println("Attaching interface $newName to ${classNode.name}")
                             classNode.interfaces.add(newName)
-                        }
+//                        }
                         if (classNode.signature != null) {
                             classNode.signature = abstractionEntry.newSignature
                         }

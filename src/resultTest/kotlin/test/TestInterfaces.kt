@@ -1,5 +1,6 @@
 package test
 
+import net.minecraft.TestThrowable
 import org.junit.jupiter.api.Test
 import v1.net.minecraft.*
 import java.io.IOException
@@ -173,7 +174,7 @@ fun ITestThrows.testThrowsCalls() {
     checked()
 }
 
- fun ITestOverload.testOverloadCalls() {
+fun ITestOverload.testOverloadCalls() {
     x()
     x(2)
 }
@@ -347,7 +348,6 @@ class TestInterfaces {
     }
 
 
-
     @Test
     fun testOtherClass() {
         with(ITestOtherClass.create()) {
@@ -379,6 +379,21 @@ class TestInterfaces {
             assertEquals(inheritedMethod(), 2)
         }
     }
+
+    @Test
+    fun testThrowable() {
+        var catched = false
+        try {
+            throw TestThrowable("foo")
+        } catch (e: Throwable) {
+            if (e is ITestThrowable) {
+                catched = true
+            }
+        }
+        assertEquals(catched, true)
+    }
+
+//    fun tryCatch(e)
 
     @Test
     fun testThrows() {

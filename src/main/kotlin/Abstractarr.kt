@@ -34,7 +34,7 @@ data class AbstractionMetadata(
 typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 
 @Serializable
-data class AbstractedClassInfo(val apiClassName: String, val isThrowable: Boolean, val newSignature: String)
+data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
 //data class AbstractionManifest(val )
 //data class AbstractionResult()
@@ -86,18 +86,18 @@ private fun buildAbstractionManifest(
         outerClass.allInnerClassesAndThis().map { mcClass ->
             val mcClassName = mcClass.name.toSlashQualifiedString()
             val apiClass = mcClass.name.toApiClass()
-            val isThrowable = mcClass.isThrowable(index)
+//            val isThrowable = mcClass.isThrowable(index)
             val oldSignature = mcClass.getSignature()
             val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
                 name = apiClass,
                 typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
             )
 
-            val newSignature = if (isThrowable) oldSignature.copy(superClass = insertedApiClass)
-            else oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
+            val newSignature = /*if (isThrowable) oldSignature.copy(superClass = insertedApiClass)
+            else*/ oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
             mcClassName to AbstractedClassInfo(
                 apiClassName = apiClass.toSlashQualifiedString(),
-                isThrowable = isThrowable, newSignature = newSignature.toClassfileName()
+                /*isThrowable = isThrowable, */newSignature = newSignature.toClassfileName()
             )
         }
     }.toMap()
@@ -171,12 +171,12 @@ private data class ClassAbstractor(
 ) {
     fun abstractClass(destPath: Path) {
         check(classApi.visibility == ClassVisibility.Public)
-        if (classApi.isThrowable(index)) {
-            createExceptionSuperclass(destPath)
-        } else {
+//        if (classApi.isThrowable(index)) {
+//            createExceptionSuperclass(destPath)
+//        } else {
             createApiInterface(null, destPath)
             if (!classApi.isFinal) createBaseclass(null, destPath)
-        }
+//        }
     }
     // No need to add I for inner classes
 
@@ -188,7 +188,7 @@ private data class ClassAbstractor(
         //TODO: more advanced filtration system (baseclasses need to be explcitly specified)
         // (inner baseclasses are not supported)
         if (classApi.isInnerClass && (!classApi.isStatic || classApi.isProtected)) return
-        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
+//        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
@@ -224,7 +224,7 @@ private data class ClassAbstractor(
         // No need to add I for inner classes
         val (packageName, shortName) = apiClassName(outerClass) { it.toApiClass() }
 
-        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
+//        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
 
         // If it's not a mc class then we add an asSuper() method
         val superClass = classApi.superClass?.let { if (it.isMcClass()) it.remapToApiClass() else null }
@@ -250,30 +250,30 @@ private data class ClassAbstractor(
         writeClass(destPath, classInfo, packageName, outerClass, isInnerClassStatic = true)
     }
 
-    fun createExceptionSuperclass(destPath: Path) = with(metadata.versionPackage) {
-        val (packageName, shortName) = apiClassName(outerClass = null) { it.toApiClass() }
-
-        assert(!classApi.isInnerClass)
-
-        val superClass = classApi.superClass?.remapToApiClass()
-
-        val interfaces = classApi.superInterfaces.remapToApiClasses()
-
-        val classInfo = ClassInfo(
-            visibility = Visibility.Public,
-            access = exceptionSuperclassAccess(metadata),
-            shortName = shortName.innermostClass(),
-            typeArguments = allApiInterfaceTypeArguments(),
-            superInterfaces = interfaces,
-            superClass = superClass,
-            annotations = /*classApi.annotations*/ listOf()
-            // soft to do: add annotations, compilation errors are not a problem anymore
-        ) {
-            addApiInterfaceBody()
-        }
-
-        codegen().writeClass(classInfo, packageName, destPath)
-    }
+//    fun createExceptionSuperclass(destPath: Path) = with(metadata.versionPackage) {
+//        val (packageName, shortName) = apiClassName(outerClass = null) { it.toApiClass() }
+//
+//        assert(!classApi.isInnerClass)
+//
+//        val superClass = classApi.superClass?.remapToApiClass()
+//
+//        val interfaces = classApi.superInterfaces.remapToApiClasses()
+//
+//        val classInfo = ClassInfo(
+//            visibility = Visibility.Public,
+//            access = exceptionSuperclassAccess(metadata),
+//            shortName = shortName.innermostClass(),
+//            typeArguments = allApiInterfaceTypeArguments(),
+//            superInterfaces = interfaces,
+//            superClass = superClass,
+//            annotations = /*classApi.annotations*/ listOf()
+//            // soft to do: add annotations, compilation errors are not a problem anymore
+//        ) {
+//            addApiInterfaceBody()
+//        }
+//
+//        codegen().writeClass(classInfo, packageName, destPath)
+//    }
 
     private fun codegen() = if (metadata.writeRawAsm) AsmCodeGenerator(index) else JavaCodeGenerator
 
@@ -366,7 +366,7 @@ private data class ClassAbstractor(
     }
 
     private fun GeneratedClass.addApiInterfaceBody() {
-        if (!classApi.isThrowable(index)) addAsSuperMethod()
+        /*if (!classApi.isThrowable(index))*/ addAsSuperMethod()
         for (method in classApi.methods) {
             if (method.isPublic) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
