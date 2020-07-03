@@ -734,7 +734,5 @@ class TestBaseClasses {
         }
 
     }
-    //TODO: tests for minecraft exceptions
-
 
 }

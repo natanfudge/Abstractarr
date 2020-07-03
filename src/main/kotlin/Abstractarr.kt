@@ -36,12 +36,6 @@ typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 @Serializable
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
-//data class AbstractionManifest(val )
-//data class AbstractionResult()
-
-//TODO: release meta-utils snapshots for buildSrc -> make throwables extend the superexception instead of the original exception and an interface
-
-
 //TODO: for parameter names and docs and line numbers, use forgedflower?
 
 object Abstractor {
@@ -524,7 +518,7 @@ private data class ClassAbstractor(
                 name = "asSuper",
                 visibility = Visibility.Public,
                 returnType = superClass,
-                parameters = mapOf(), throws = listOf(), typeArguments = listOf(),
+                parameters = listOf(), throws = listOf(), typeArguments = listOf(),
                 static = false, abstract = false, final = false
             ) {
                 addStatement(ReturnStatement(ThisExpression.cast(fromType = classApi.asType(), toType = superClass)))
@@ -614,7 +608,7 @@ private data class ClassAbstractor(
             // Add _field when getter clashes with a method of the same name
             name = if (classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }) getterName + "_field"
             else getterName,
-            parameters = mapOf(),
+            parameters = listOf(),
             visibility = field.visibility,
             returnType = field.type.remapToApiClass(),
             abstract = false,
@@ -640,7 +634,7 @@ private data class ClassAbstractor(
     private fun GeneratedClass.addSetter(field: ClassApi.Field, castSelf: Boolean) {
         addMethod(
             name = "set" + field.name.capitalize(),
-            parameters = mapOf(field.name to field.type.remapToApiClass()),
+            parameters = listOf(field.name to field.type.remapToApiClass()),
             visibility = field.visibility,
             returnType = GenericReturnType.Void.noAnnotations(),
             abstract = false,
@@ -708,13 +702,13 @@ private data class ClassAbstractor(
 
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
-        method.parameters.mapValues { (_, v) -> v.remapToApiClass() }.toMap()
+        method.parameters.map { (k, v) -> k to  v.remapToApiClass() }
 
     private fun GeneratedClass.addArrayFactory() {
         addMethod(
             name = if (existsMethodWithSameDescriptorAsArrayFactory()) "${ArrayFactoryName}_factory" else ArrayFactoryName,
             visibility = Visibility.Public,
-            parameters = mapOf(ArrayFactorySizeParamName to GenericsPrimitiveType.Int.noAnnotations()),
+            parameters = listOf(ArrayFactorySizeParamName to GenericsPrimitiveType.Int.noAnnotations()),
             returnType = ArrayGenericType(classApi.asType().type).annotated(NotNullAnnotation).remapToApiClass()
                 .pushAllArrayTypeArgumentsToInnermostClass(),
             abstract = false,
@@ -884,7 +878,7 @@ private data class ClassAbstractor(
     private fun ClassApi.Method.mapTypeVariables(
         mapper: (TypeVariable) -> GenericType
     ) = copy(returnType = returnType.mapTypeVariables(mapper),
-        parameters = parameters.mapValues { it.value.mapTypeVariables(mapper) },
+        parameters = parameters.mapValues { it.mapTypeVariables(mapper) },
         throws = throws.map { it.mapTypeVariables(mapper) },
         typeArguments = typeArguments.map { it.mapTypeVariables(mapper) }
     )

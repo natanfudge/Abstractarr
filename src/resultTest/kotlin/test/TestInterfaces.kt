@@ -393,8 +393,6 @@ class TestInterfaces {
         assertEquals(catched, true)
     }
 
-//    fun tryCatch(e)
-
     @Test
     fun testThrows() {
         try {

@@ -49,8 +49,31 @@ class TestAbstraction {
         implDest.convertDirToJar()
         implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
-        apiDest.convertDirToJar()
+        val apiJar = apiDest.convertDirToJar()
+        val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources.jar")
+        ForgedFlower.decompile(
+            preferences = ForgedFlower.Preferences(),
+            input = apiJar,
+            output = apiSrcDest,
+            javaDocs = getResource("mappings.tiny"),
+            libraries = listOf(getResource("testOriginalJar.jar")),
+            lineMap = Paths.get("linemap")
+        )
+    }
 
+    @Test
+    fun testForgedFlower() {
+        val sources = Paths.get("abstractedAsmApi-sources.jar")
+        ForgedFlower.decompile(
+            preferences = ForgedFlower.Preferences(),
+            input = Paths.get("build\\resources\\test\\abstractedAsmApi.jar"),
+            output = sources,
+            javaDocs = getResource("mappings.tiny"),
+            libraries = listOf(Paths.get("testdata/mcJarWithInterfaces.jar")),
+            lineMap = Paths.get("linemap")
+        )
+
+        sources.unzipJar()
     }
 
     private fun verifyJava(dest: Path) {
