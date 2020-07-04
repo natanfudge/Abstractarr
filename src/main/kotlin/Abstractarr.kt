@@ -28,7 +28,8 @@ data class AbstractionMetadata(
     val versionPackage: VersionPackage,
     val classPath: List<Path>,
     val fitToPublicApi: Boolean,
-    val writeRawAsm: Boolean
+    val writeRawAsm: Boolean,
+    val createBaseClassesFor: (ClassApi) -> Boolean
 )
 /** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
 typealias AbstractionManifest = Map<String, AbstractedClassInfo>
@@ -36,7 +37,6 @@ typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 @Serializable
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
-//TODO: for parameter names and docs and line numbers, use forgedflower?
 
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata): AbstractionManifest {
@@ -153,9 +153,6 @@ private fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
     variant = if (origIsInterface) ClassVariant.Interface else ClassVariant.AbstractClass
 )
 
-//TODO: exceptions
-
-//TODO: consider whether usages of SAM should be shown as the baseclasses instead of the api interfaces
 
 private data class ClassAbstractor(
     private val metadata: AbstractionMetadata,
@@ -165,12 +162,9 @@ private data class ClassAbstractor(
 ) {
     fun abstractClass(destPath: Path) {
         check(classApi.visibility == ClassVisibility.Public)
-//        if (classApi.isThrowable(index)) {
-//            createExceptionSuperclass(destPath)
-//        } else {
-            createApiInterface(null, destPath)
-            if (!classApi.isFinal) createBaseclass(null, destPath)
-//        }
+
+        createApiInterface(null, destPath)
+        if (!classApi.isFinal) createBaseclass(null, destPath)
     }
     // No need to add I for inner classes
 
@@ -179,9 +173,8 @@ private data class ClassAbstractor(
 
 
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
-        //TODO: more advanced filtration system (baseclasses need to be explcitly specified)
-        // (inner baseclasses are not supported)
-        if (classApi.isInnerClass && (!classApi.isStatic || classApi.isProtected)) return
+        if (!metadata.createBaseClassesFor(classApi)) return@with
+//        if (classApi.isInnerClass && (!classApi.isStatic || classApi.isProtected)) return
 //        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
@@ -237,37 +230,12 @@ private data class ClassAbstractor(
             // Optimally we would like to not expose this interface at all in case this class is protected,
             // but if we declare it protected we can't reference it from the baseclass.
             // So as a compromise we declare the class as public with no body.
-            //TODO: add some marker to tell users this is supposed to be protected.
             if (!classApi.isProtected) addApiInterfaceBody()
+            else addJavadoc("This is originally a protected class")
         }
 
         writeClass(destPath, classInfo, packageName, outerClass, isInnerClassStatic = true)
     }
-
-//    fun createExceptionSuperclass(destPath: Path) = with(metadata.versionPackage) {
-//        val (packageName, shortName) = apiClassName(outerClass = null) { it.toApiClass() }
-//
-//        assert(!classApi.isInnerClass)
-//
-//        val superClass = classApi.superClass?.remapToApiClass()
-//
-//        val interfaces = classApi.superInterfaces.remapToApiClasses()
-//
-//        val classInfo = ClassInfo(
-//            visibility = Visibility.Public,
-//            access = exceptionSuperclassAccess(metadata),
-//            shortName = shortName.innermostClass(),
-//            typeArguments = allApiInterfaceTypeArguments(),
-//            superInterfaces = interfaces,
-//            superClass = superClass,
-//            annotations = /*classApi.annotations*/ listOf()
-//            // soft to do: add annotations, compilation errors are not a problem anymore
-//        ) {
-//            addApiInterfaceBody()
-//        }
-//
-//        codegen().writeClass(classInfo, packageName, destPath)
-//    }
 
     private fun codegen() = if (metadata.writeRawAsm) AsmCodeGenerator(index) else JavaCodeGenerator
 
@@ -702,7 +670,7 @@ private data class ClassAbstractor(
 
 
     private fun apiParametersDeclaration(method: ClassApi.Method) =
-        method.parameters.map { (k, v) -> k to  v.remapToApiClass() }
+        method.parameters.map { (k, v) -> k to v.remapToApiClass() }
 
     private fun GeneratedClass.addArrayFactory() {
         addMethod(

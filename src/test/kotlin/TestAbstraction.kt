@@ -4,6 +4,8 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
+import metautils.api.isInnerClass
+import metautils.api.isProtected
 import org.junit.jupiter.api.Test
 import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
@@ -21,6 +23,7 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
+    //soft to do: javadocs
     @Test
     fun testAbstraction() {
 
@@ -32,7 +35,8 @@ class TestAbstraction {
 
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
-            classPath = listOf(), fitToPublicApi = false, writeRawAsm = true
+            classPath = listOf(), fitToPublicApi = false, writeRawAsm = true,
+            createBaseClassesFor = { !it.isInnerClass || (it.isStatic && !it.isProtected) }
         )
         Abstractor.abstract(mcJar, implDest, metadata = metadata)
         val manifest = Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
@@ -49,31 +53,18 @@ class TestAbstraction {
         implDest.convertDirToJar()
         implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
-        val apiJar = apiDest.convertDirToJar()
-        val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources.jar")
-        ForgedFlower.decompile(
-            preferences = ForgedFlower.Preferences(),
-            input = apiJar,
-            output = apiSrcDest,
-            javaDocs = getResource("mappings.tiny"),
-            libraries = listOf(getResource("testOriginalJar.jar")),
-            lineMap = Paths.get("linemap")
-        )
-    }
-
-    @Test
-    fun testForgedFlower() {
-        val sources = Paths.get("abstractedAsmApi-sources.jar")
-        ForgedFlower.decompile(
-            preferences = ForgedFlower.Preferences(),
-            input = Paths.get("build\\resources\\test\\abstractedAsmApi.jar"),
-            output = sources,
-            javaDocs = getResource("mappings.tiny"),
-            libraries = listOf(Paths.get("testdata/mcJarWithInterfaces.jar")),
-            lineMap = Paths.get("linemap")
-        )
-
-        sources.unzipJar()
+        apiDest.convertDirToJar()
+        val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources")
+        Abstractor.abstract(mcJar, apiSrcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
+        apiSrcDest.convertDirToJar()
+//        ForgedFlower.decompile(
+//            preferences = ForgedFlower.Preferences(),
+//            input = apiJar,
+//            output = apiSrcDest,
+//            javaDocs = getResource("mappings.tiny"),
+//            libraries = listOf(getResource("testOriginalJar.jar")),
+//            lineMap = Paths.get("linemap")
+//        )
     }
 
     private fun verifyJava(dest: Path) {
