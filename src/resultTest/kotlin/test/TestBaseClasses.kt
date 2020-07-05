@@ -240,6 +240,9 @@ class TestBaseClasses {
         val expected = ITestConcreteClass.TestStaticInnerClass.create(0, ITestOtherClass.create())
 
         object : BaseTestConcreteClass(0, ITestOtherClass.create()) {
+            init {
+                assertEquals(protectedStatic(),"SomeString")
+            }
             override fun publicInt(p0: ITestOtherClass?): Int {
                 return 3
             }

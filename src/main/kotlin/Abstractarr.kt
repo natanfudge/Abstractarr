@@ -29,7 +29,8 @@ data class AbstractionMetadata(
     val classPath: List<Path>,
     val fitToPublicApi: Boolean,
     val writeRawAsm: Boolean,
-    val createBaseClassesFor: (ClassApi) -> Boolean
+    val createBaseClassesFor: (ClassApi) -> Boolean,
+    val javadocs: JavaDocs
 )
 /** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
 typealias AbstractionManifest = Map<String, AbstractedClassInfo>
@@ -64,7 +65,7 @@ object Abstractor {
                 destPath = destDir
             )
         }
-        return buildAbstractionManifest(classes, index, metadata.versionPackage)
+        return buildAbstractionManifest(classes, metadata.versionPackage)
     }
 
 
@@ -73,25 +74,22 @@ object Abstractor {
 
 private fun buildAbstractionManifest(
     classes: Collection<ClassApi>,
-    index: ClasspathIndex,
     version: VersionPackage
 ): AbstractionManifest = with(version) {
     classes.flatMap { outerClass ->
         outerClass.allInnerClassesAndThis().map { mcClass ->
             val mcClassName = mcClass.name.toSlashQualifiedString()
             val apiClass = mcClass.name.toApiClass()
-//            val isThrowable = mcClass.isThrowable(index)
             val oldSignature = mcClass.getSignature()
             val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
                 name = apiClass,
                 typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
             )
 
-            val newSignature = /*if (isThrowable) oldSignature.copy(superClass = insertedApiClass)
-            else*/ oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
+            val newSignature = oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
             mcClassName to AbstractedClassInfo(
                 apiClassName = apiClass.toSlashQualifiedString(),
-                /*isThrowable = isThrowable, */newSignature = newSignature.toClassfileName()
+                newSignature = newSignature.toClassfileName()
             )
         }
     }.toMap()
@@ -115,14 +113,6 @@ private fun listAllGeneratedClasses(
             )
 
             listOf(apiInterface, baseclass)
-//                .applyIf(mcClass.isThrowable(index)) {
-//                    val exceptionSuperclass = mcClass.name.toExceptionSuperClass() to entryJustForAccess(
-//                        exceptionSuperclassAccess(metadata),
-//                        isStatic = mcClass.isStatic,
-//                        visibility = mcClass.visibility
-//                    )
-//                    it + exceptionSuperclass
-//                }
         }
     }.toMap()
 }
@@ -141,12 +131,6 @@ private fun apiInterfaceAccess(metadata: AbstractionMetadata) = ClassAccess(
     variant = ClassVariant.Interface
 )
 
-private fun exceptionSuperclassAccess(metadata: AbstractionMetadata) = ClassAccess(
-    isFinal = metadata.fitToPublicApi,
-    variant = ClassVariant.AbstractClass
-)
-
-//private val apiClassVisibility = ClassVisibility.Public
 
 private fun baseClassAccess(origIsInterface: Boolean) = ClassAccess(
     isFinal = false,
@@ -174,8 +158,6 @@ private data class ClassAbstractor(
 
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         if (!metadata.createBaseClassesFor(classApi)) return@with
-//        if (classApi.isInnerClass && (!classApi.isStatic || classApi.isProtected)) return
-//        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
@@ -199,7 +181,10 @@ private data class ClassAbstractor(
                 else -> classApi.asRawType()
             },
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
-        ) { addBaseclassBody() }
+        ) {
+            getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
+            addBaseclassBody()
+        }
 
         writeClass(destPath, classInfo, packageName, outerClass, isInnerClassStatic = classApi.isStatic)
     }
@@ -211,7 +196,6 @@ private data class ClassAbstractor(
         // No need to add I for inner classes
         val (packageName, shortName) = apiClassName(outerClass) { it.toApiClass() }
 
-//        require(!(classApi.isThrowable(index) && classApi.isInnerClass)) { "Inner exception classes are not supported" }
 
         // If it's not a mc class then we add an asSuper() method
         val superClass = classApi.superClass?.let { if (it.isMcClass()) it.remapToApiClass() else null }
@@ -227,6 +211,7 @@ private data class ClassAbstractor(
             superClass = null,
             annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
         ) {
+            getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
             // Optimally we would like to not expose this interface at all in case this class is protected,
             // but if we declare it protected we can't reference it from the baseclass.
             // So as a compromise we declare the class as public with no body.
@@ -262,7 +247,6 @@ private data class ClassAbstractor(
             }
         }
 
-//        val methodsIncludingSupers = classApi.methods + classApi.getAllSuperClassMinecraftMethods()
         val methodsIncludingSupers = classApi.getAllMinecraftMethodsIncludingSupers()
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
@@ -423,6 +407,7 @@ private data class ClassAbstractor(
         val noBody = metadata.fitToPublicApi && method.isAbstract && !forceBody
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
+            getJavadoc(method.documentable())?.let { addJavadoc(it) }
             if (noBody) return@apiMethodInfo
             val call = MethodCall.Method(
                 receiver = when {
@@ -460,8 +445,6 @@ private data class ClassAbstractor(
 
     }
 
-//    private fun apiMethodReturnType(returnType: JavaReturnType, baseClass: Boolean) =
-//        returnType.applyIf(baseClass) { it.copy(annotations = it.annotations + OverrideAnnotation) }
 
     private fun GeneratedClass.addBaseclassConstructor(method: ClassApi.Method) {
         // Abstract classes/interfaces can't be constructed directly
@@ -470,6 +453,7 @@ private data class ClassAbstractor(
         val mcClassType = classApi.asRawType()
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
+            getJavadoc(method.documentable())?.let { addJavadoc(it) }
             val passedParameters = apiPassedParameters(method)
             addStatement(ConstructorCall.Super(passedParameters, superType = mcClassType.toJvmType()))
         }
@@ -494,16 +478,6 @@ private data class ClassAbstractor(
         }
     }
 
-//    private fun superTypedInterface(enclosedSuperClass: JavaClassType) = ClassGenericType(
-//        SuperTypedPackage,
-//        SimpleClassGenericType(
-//            SuperTypedName,
-//            TypeArgument.SpecificType(
-//                enclosedSuperClass.remapToApiClass().type,
-//                wildcardType = null
-//            ).singletonList()
-//        ).singletonList()
-//    ).noAnnotations()
 
     private fun GeneratedClass.addApiInterfaceFactory(method: ClassApi.Method) {
         // Abstract classes/interfaces can't be constructed directly
@@ -519,6 +493,7 @@ private data class ClassAbstractor(
         val mcClassType = classApi.asRawType()
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
+            getJavadoc(method.documentable())?.let { addJavadoc(it) }
             val returnedValue = MethodCall.Constructor(
                 constructing = mcClassType,
                 parameters = apiPassedParameters(method),
@@ -544,9 +519,13 @@ private data class ClassAbstractor(
     ) = MethodInfo(
         visibility = visibility,
         throws = throws.map { it.remapToApiClass() },
-        parameters = if (remapParameters) apiParametersDeclaration(this) else parameters,
+        parameters = parameters.mapIndexed { i, (name, type) ->
+            val finalType = type.applyIf(remapParameters) { it.remapToApiClass() }
+            ParameterInfo(name, finalType, javadoc = getJavadoc(parameterDocumentable(i)))
+        },
         body = body
     )
+
 
     private fun GeneratedClass.abstractField(field: ClassApi.Field, castSelf: Boolean) {
         if (field.isFinal && field.isStatic) {
@@ -591,6 +570,7 @@ private data class ClassAbstractor(
                     fieldAccess.castFromMcToApi(field.type)
                 )
             )
+            getJavadoc(field.documentable())?.let { addJavadoc(it) }
         }
     }
 
@@ -602,7 +582,13 @@ private data class ClassAbstractor(
     private fun GeneratedClass.addSetter(field: ClassApi.Field, castSelf: Boolean) {
         addMethod(
             name = "set" + field.name.capitalize(),
-            parameters = listOf(field.name to field.type.remapToApiClass()),
+            parameters = listOf(
+                ParameterInfo(
+                    field.name,
+                    field.type.remapToApiClass(),
+                    getJavadoc(field.documentable())
+                )
+            ),
             visibility = field.visibility,
             returnType = GenericReturnType.Void.noAnnotations(),
             abstract = false,
@@ -645,10 +631,16 @@ private data class ClassAbstractor(
                 abstract = false,
                 returnType = constructedInnerClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
                     .copy(annotations = listOf(NotNullAnnotation)),
-                parameters = apiParametersDeclaration(constructor),
+                parameters = constructor.parameters.mapIndexed { i, (name, type) ->
+                    ParameterInfo(
+                        name, type.remapToApiClass(),
+                        getJavadoc(constructor.parameterDocumentable(innerClass, i))
+                    )
+                },
                 typeArguments = innerClass.typeArguments.remapDeclToApiClasses(),
                 throws = constructor.throws
             ) {
+                getJavadoc(constructor.documentable())?.let { addJavadoc(it) }
                 addStatement(
                     ReturnStatement(
                         MethodCall.Constructor(
@@ -669,14 +661,16 @@ private data class ClassAbstractor(
         }
 
 
-    private fun apiParametersDeclaration(method: ClassApi.Method) =
-        method.parameters.map { (k, v) -> k to v.remapToApiClass() }
+//    private fun apiParametersDeclaration(method: ClassApi.Method) =
+//        method.parameters.map { (k, v) -> k to v.remapToApiClass() }
 
     private fun GeneratedClass.addArrayFactory() {
         addMethod(
             name = if (existsMethodWithSameDescriptorAsArrayFactory()) "${ArrayFactoryName}_factory" else ArrayFactoryName,
             visibility = Visibility.Public,
-            parameters = listOf(ArrayFactorySizeParamName to GenericsPrimitiveType.Int.noAnnotations()),
+            parameters = listOf(
+                ParameterInfo(ArrayFactorySizeParamName, GenericsPrimitiveType.Int.noAnnotations(), javadoc = null)
+            ),
             returnType = ArrayGenericType(classApi.asType().type).annotated(NotNullAnnotation).remapToApiClass()
                 .pushAllArrayTypeArgumentsToInnermostClass(),
             abstract = false,
@@ -716,6 +710,23 @@ private data class ClassAbstractor(
             )
         }
     }
+
+
+////////////// JAVADOCS //////////////
+
+    private fun ClassApi.documentable() = Documentable.Class(name)
+    private fun ClassApi.Method.documentable() = documentable(classApi)
+    private fun ClassApi.Method.documentable(classIn: ClassApi) =
+        Documentable.Method(classIn.documentable(), name, getJvmDescriptor())
+
+    private fun ClassApi.Method.parameterDocumentable(index: Int) = parameterDocumentable(classApi, index)
+    private fun ClassApi.Method.parameterDocumentable(classIn: ClassApi, index: Int) =
+        Documentable.Parameter(documentable(classIn), index)
+
+    private fun ClassApi.Field.documentable() =
+        Documentable.Field(classApi.documentable(), name)
+
+    private fun getJavadoc(documentable: Documentable) = metadata.javadocs.getDoc(documentable)?.plus("\n")
 
 ////////// TYPE VARIABLE INLINING //////////
 

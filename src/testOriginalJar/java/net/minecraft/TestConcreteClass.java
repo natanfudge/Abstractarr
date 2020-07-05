@@ -26,6 +26,8 @@ public class TestConcreteClass extends TestSuperClass {
     protected static String protectedStatic() {
         return "SomeString";
     }
+    protected static void protectedStaticParam(int x) {
+    }
 
     public static int publicStatic() {
         return 4;
