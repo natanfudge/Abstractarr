@@ -1,4 +1,4 @@
-import asm.readToClassNode
+import metautils.asm.readToClassNode
 import metautils.signature.*
 import org.junit.jupiter.api.Test
 import metautils.testing.getResource

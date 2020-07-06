@@ -53,6 +53,7 @@ class JavaDocs(
 //    }
 
     companion object {
+        val Empty = JavaDocs(mapOf(), mapOf(), mapOf(), mapOf())
         private fun Mapped.yarnName() = getName("named")
         private fun Descriptored.yarnDescriptor() = getDescriptor("named")
         private fun ClassDef.documentable(): Documentable.Class {

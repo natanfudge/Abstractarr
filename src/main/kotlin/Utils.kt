@@ -1,5 +1,5 @@
 import api.*
-import asm.opCode
+import metautils.asm.opCode
 import metautils.api.*
 import metautils.signature.ArrayGenericType
 import metautils.signature.ClassGenericType

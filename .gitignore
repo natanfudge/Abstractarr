@@ -1,6 +1,9 @@
+src/test/resources/minecraft-1.16.1.jar
 .gradle/
 .idea/
 build/
 !src/test/resources/dummyResource
 out/
 testdata/
+src/test/resources/mclibs/*
+src/test/resources/minecraft-1.16.1/*

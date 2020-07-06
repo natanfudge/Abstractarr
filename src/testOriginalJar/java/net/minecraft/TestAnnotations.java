@@ -4,8 +4,11 @@ package net.minecraft;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.jws.WebService;
+
 
 @Nullable
+@WebService(endpointInterface = "somevalue")
 public class TestAnnotations extends TestAbstractClass {
     public TestAnnotations() {
         super(0, null);

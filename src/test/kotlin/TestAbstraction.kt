@@ -1,5 +1,4 @@
-import abstractor.VersionPackage
-import asm.readToClassNode
+import metautils.asm.readToClassNode
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -14,7 +13,9 @@ import org.junit.jupiter.api.Test
 import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
 import metautils.testing.getResource
+import metautils.testing.verifyClassFiles
 import metautils.util.*
+import org.junit.jupiter.api.Disabled
 import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Path
@@ -27,12 +28,10 @@ import javax.tools.ToolProvider
 
 class TestAbstraction {
 
-    //soft to do: javadocs
     @Test
     fun testAbstraction() {
 
         val mcJar = getResource("testOriginalJar.jar")
-//        val dest = mcJar.parent.resolve("abstractedSrc")
         val implDest = mcJar.parent.resolve("abstractedAsm")
         val apiDest = mcJar.parent.resolve("abstractedAsmApi")
 
@@ -44,6 +43,7 @@ class TestAbstraction {
             javadocs = testJavadocs()
         )
         Abstractor.abstract(mcJar, implDest, metadata = metadata)
+        verifyClassFiles(implDest, listOf(mcJar))
         val manifest = Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
         val manifestJson = Json(
             JsonConfiguration(prettyPrint = true)
@@ -62,14 +62,28 @@ class TestAbstraction {
         val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources")
         Abstractor.abstract(mcJar, apiSrcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
         apiSrcDest.convertDirToJar()
-//        ForgedFlower.decompile(
-//            preferences = ForgedFlower.Preferences(),
-//            input = apiJar,
-//            output = apiSrcDest,
-//            javaDocs = getResource("mappings.tiny"),
-//            libraries = listOf(getResource("testOriginalJar.jar")),
-//            lineMap = Paths.get("linemap")
-//        )
+    }
+
+    //TODO: multithreading
+    //TODO: test javadocs
+
+    @Test
+    @Disabled
+    fun testMc() {
+        val mcJar = getResource("minecraft-1.16.1.jar")
+        val implDest = mcJar.parent.resolve("abstractedMcImpl")
+        val apiDest = mcJar.parent.resolve("abstractedMcApi")
+        val classpath = getResource("mclibs").recursiveChildren().filter { it.hasExtension(".jar") }.toList()
+        val metadata = AbstractionMetadata(
+            versionPackage = VersionPackage("v1"),
+            classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
+            createBaseClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/Block" },
+            javadocs = JavaDocs.Empty
+        )
+        Abstractor.abstract(mcJar, implDest, metadata)
+        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
+        verifyClassFiles(implDest, classpath + listOf(mcJar))
+        Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
     }
 
     private fun testJavadocs(): JavaDocs {
@@ -100,7 +114,7 @@ class TestAbstraction {
             MethodDescriptor(listOf(JvmPrimitiveType.Int), ReturnDescriptor.Void)
         )
 
-        val testProtectedMethodParam = Documentable.Parameter(testProtectedMethod,0)
+        val testProtectedMethodParam = Documentable.Parameter(testProtectedMethod, 0)
 
         val testInnerClass = Documentable.Class(
             "net/minecraft/TestConcreteClass\$TestInnerClass".toQualifiedName(dotQualified = false)

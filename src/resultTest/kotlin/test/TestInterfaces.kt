@@ -20,6 +20,7 @@ fun ITestConcreteClass.testConcreteClassCalls() {
     assertEquals(publicInt(null), 2)
     assertEquals(mutatesField(), 123)
     assertEquals(finalMethod(), 3)
+    longTest(0,1L,0)
 
     val value = innerClassMethod()
     assert(innerClassMethod() is ITestConcreteClass.TestStaticInnerClass)
@@ -42,6 +43,7 @@ fun ITestClashingNames.testClashingNamesCalls() {
     someInt = 2
     assertEquals(someInt, 2)
     assertEquals(getSomeInt(3), 0)
+    setSomeInt_field(54)
 }
 
 fun ITestInnerExtender.testInnerExtenderCalls() {
@@ -206,7 +208,8 @@ class TestInterfaces {
 
     @Test
     fun testClashingNames() {
-        with(ITestClashingNames.create()) {
+        ITestClashingNames.create_method(3)
+        with(ITestClashingNames.create(2)) {
             testClashingNamesCalls()
         }
     }

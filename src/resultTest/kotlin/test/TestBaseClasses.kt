@@ -205,10 +205,10 @@ class TestBaseClasses {
 
     @Test
     fun testClashingNames() {
-        object : BaseTestClashingNames() {
+        object : BaseTestClashingNames(4) {
         }.testClashingNamesCalls()
 
-        with(object : BaseTestClashingNames() {
+        with(object : BaseTestClashingNames(5) {
             override fun isSomeBool(): Boolean {
                 return true
             }

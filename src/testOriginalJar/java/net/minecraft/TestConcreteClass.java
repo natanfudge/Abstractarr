@@ -23,9 +23,14 @@ public class TestConcreteClass extends TestSuperClass {
         return 2;
     }
 
+    public void longTest(int x, long y, int z) {
+
+    }
+
     protected static String protectedStatic() {
         return "SomeString";
     }
+
     protected static void protectedStaticParam(int x) {
     }
 
@@ -95,7 +100,7 @@ public class TestConcreteClass extends TestSuperClass {
     }
 
     public class TestInnerClass {
-        public TestInnerClass(int arg1, TestOtherClass arg2)  throws RuntimeException {
+        public TestInnerClass(int arg1, TestOtherClass arg2) throws RuntimeException {
 
         }
 

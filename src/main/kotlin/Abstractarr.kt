@@ -1,8 +1,6 @@
-import abstractor.VersionPackage
-import abstractor.isMcClass
 import api.*
 import codegeneration.*
-import codegeneration.asm.AsmCodeGenerator
+import metautils.codegeneration.asm.AsmCodeGenerator
 import kotlinx.serialization.Serializable
 import metautils.codegeneration.asm.toAsmAccess
 import metautils.api.*
@@ -38,7 +36,6 @@ typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 @Serializable
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
-
 object Abstractor {
     fun abstract(mcJar: Path, destDir: Path, metadata: AbstractionMetadata): AbstractionManifest {
         require(destDir.parent.exists()) { "The chosen destination path '$destDir' is not in any existing directory." }
@@ -47,25 +44,27 @@ object Abstractor {
         destDir.deleteRecursively()
         destDir.createDirectory()
 
-        val classes = ClassApi.readFromJar(mcJar)
+        val classes = ClassApi.readFromJar(mcJar) { path ->
+            path.toString().let { it.startsWith("/net/minecraft/") || it.startsWith("/com/mojang/blaze3d") }
+        }
         val classNamesToClasses = classes.flatMap { outerClass ->
-            outerClass.allInnerClassesAndThis()
-                .map { it.name to it }
+            outerClass.allInnerClassesAndThis().map { it.name to it }
         }.toMap()
 
+//        net.minecraft.block.DoubleBlockProperties$PropertySource
         // We need to add the access of api interfaces, base classes, and base api interfaces.
         // For other things in ClassEntry we just pass empty list in assumption they won't be needed.
         val additionalEntries = listAllGeneratedClasses(classes, metadata)
 
-        val index = indexClasspath(metadata.classPath + listOf(mcJar), additionalEntries)
-
-        for (classApi in classes) {
-            if (!classApi.isPublicApi) continue
-            ClassAbstractor(metadata, index, classApi, classNamesToClasses).abstractClass(
-                destPath = destDir
-            )
+        ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries).use {
+            for (classApi in classes) {
+                if (!classApi.isPublicApi) continue
+                ClassAbstractor(metadata, it, classApi, classNamesToClasses).abstractClass(
+                    destPath = destDir
+                )
+            }
+            return buildAbstractionManifest(classes, metadata.versionPackage)
         }
-        return buildAbstractionManifest(classes, metadata.versionPackage)
     }
 
 
@@ -95,13 +94,14 @@ private fun buildAbstractionManifest(
     }.toMap()
 }
 
-// We don't list exception superclasses, hopefully they won't be needed
 private fun listAllGeneratedClasses(
     classes: Collection<ClassApi>,
     metadata: AbstractionMetadata
 ): Map<QualifiedName, ClassEntry> = with(metadata.versionPackage) {
     classes.flatMap { outerClass ->
-        outerClass.allInnerClassesAndThis().filter { it.isPublic || it.isProtected }.flatMap { mcClass ->
+        // This also includes package private and private stuff, because mojang sometimes exposes private classes
+        // in public apis... thank you java
+        outerClass.allInnerClassesAndThis().flatMap { mcClass ->
             val baseclass = mcClass.name.toBaseClass() to entryJustForAccess(
                 baseClassAccess(origIsInterface = mcClass.isInterface),
                 isStatic = mcClass.isStatic,
@@ -155,6 +155,14 @@ private data class ClassAbstractor(
     private fun apiClassName(outerClass: GeneratedClass?, nameMap: (QualifiedName) -> QualifiedName) =
         if (outerClass == null) nameMap(classApi.name) else classApi.name
 
+    private fun JavaClassType.isAvailableAsPublicApi(): Boolean {
+        if (!isMcClass()) return true
+        return mcClasses.getValue(type.toJvmQualifiedName()).isPublicApi
+    }
+
+    // Sometimes mc stupidly inherits non-public classes in public classes so we need to filter them out
+    private fun publicSuperInterface() =
+        classApi.superInterfaces.filter { it.isAvailableAsPublicApi() }
 
     fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         if (!metadata.createBaseClassesFor(classApi)) return@with
@@ -166,7 +174,7 @@ private data class ClassAbstractor(
         val interfaces = listOf(
             mcClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
         ).applyIf(classApi.isInterface && !metadata.fitToPublicApi) { it + mcClass } +
-                classApi.superInterfaces.remapToApiClasses()
+                publicSuperInterface().remapToApiClasses()
 
 
         val classInfo = ClassInfo(
@@ -180,7 +188,7 @@ private data class ClassAbstractor(
                 metadata.fitToPublicApi -> getClosestNonMcSuperclass()?.remapToApiClass()
                 else -> classApi.asRawType()
             },
-            annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
+            annotations = classApi.annotations
         ) {
             getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
             addBaseclassBody()
@@ -198,9 +206,11 @@ private data class ClassAbstractor(
 
 
         // If it's not a mc class then we add an asSuper() method
-        val superClass = classApi.superClass?.let { if (it.isMcClass()) it.remapToApiClass() else null }
+        val superClass = classApi.superClass?.let {
+            if (it.isMcClass() && it.isAvailableAsPublicApi()) it.remapToApiClass() else null
+        }
 
-        val interfaces = classApi.superInterfaces.remapToApiClasses().appendIfNotNull(superClass)
+        val interfaces = publicSuperInterface().remapToApiClasses().appendIfNotNull(superClass)
 
         val classInfo = ClassInfo(
             visibility = Visibility.Public,
@@ -209,7 +219,7 @@ private data class ClassAbstractor(
             typeArguments = allApiInterfaceTypeArguments(),
             superInterfaces = interfaces,
             superClass = null,
-            annotations = /*classApi.annotations*/ listOf() // Translating annotations can cause compilation errors...
+            annotations = classApi.annotations
         ) {
             getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
             // Optimally we would like to not expose this interface at all in case this class is protected,
@@ -435,7 +445,7 @@ private data class ClassAbstractor(
 
         addMethod(
             methodInfo,
-            name = method.name,
+            name = method.name.applyIf(method.conflictsWithFactoryMethod()) { it + "_method" },
             isFinal = method.isFinal && metadata.fitToPublicApi,
             isStatic = method.isStatic,
             isAbstract = noBody,
@@ -443,6 +453,12 @@ private data class ClassAbstractor(
             typeArguments = method.typeArguments.remapDeclToApiClasses()
         )
 
+    }
+
+    private fun ClassApi.Method.conflictsWithFactoryMethod(): Boolean {
+        if (name != factoryMethodName) return false
+        val params = getJvmParameters()
+        return classApi.methods.any { it.isConstructor && it.getJvmParameters() == params }
     }
 
 
@@ -504,7 +520,7 @@ private data class ClassAbstractor(
 
         addMethod(
             methodInfo,
-            name = "create",
+            name = factoryMethodName,
             isFinal = false,
             isStatic = true,
             isAbstract = false,
@@ -553,8 +569,7 @@ private data class ClassAbstractor(
                 if (field.name.startsWith(BooleanGetterPrefix)) field.name else field.name.capitalize()
         addMethod(
             // Add _field when getter clashes with a method of the same name
-            name = if (classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }) getterName + "_field"
-            else getterName,
+            name = getterName.applyIf(getterClashesWithMethod(getterName)) { it + "_field" },
             parameters = listOf(),
             visibility = field.visibility,
             returnType = field.type.remapToApiClass(),
@@ -574,14 +589,22 @@ private data class ClassAbstractor(
         }
     }
 
+    private fun getterClashesWithMethod(getterName: String) =
+        classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }
+
+
+    private fun setterClashesWithMethod(setterName: String, setterType: JvmType) = classApi.methods
+        .any { it.parameters.size == 1 && it.name == setterName && it.parameters[0].second.toJvmType() == setterType }
+
     private fun ClassApi.Field.getGetterPrefix(): String =
         if (type.type.let { it is GenericsPrimitiveType && it.primitive == JvmPrimitiveType.Boolean }) {
             if (name.startsWith(BooleanGetterPrefix)) "" else BooleanGetterPrefix
         } else "get"
 
     private fun GeneratedClass.addSetter(field: ClassApi.Field, castSelf: Boolean) {
+        val setterName = "set" + field.name.capitalize()
         addMethod(
-            name = "set" + field.name.capitalize(),
+            name = setterName.applyIf(setterClashesWithMethod(setterName, field.type.toJvmType())) { it + "_field" },
             parameters = listOf(
                 ParameterInfo(
                     field.name,
@@ -660,10 +683,6 @@ private data class ClassAbstractor(
             type.toJvmType() to VariableExpression(name).castFromApiToMc(type)
         }
 
-
-//    private fun apiParametersDeclaration(method: ClassApi.Method) =
-//        method.parameters.map { (k, v) -> k to v.remapToApiClass() }
-
     private fun GeneratedClass.addArrayFactory() {
         addMethod(
             name = if (existsMethodWithSameDescriptorAsArrayFactory()) "${ArrayFactoryName}_factory" else ArrayFactoryName,
@@ -706,7 +725,6 @@ private data class ClassAbstractor(
                 classBound = classBound,
                 interfaceBounds = mcInterfaceBounds + typeArg.interfaceBounds.map { it.remapToApiClass() }
                     .applyIf(typeArg.classBound?.isMcClass() == true) { it + typeArg.classBound!!.remapToApiClass() }
-//                    .appendIfNotNull()
             )
         }
     }
@@ -750,35 +768,6 @@ private data class ClassAbstractor(
                         }
                     }
     }
-
-//    private fun getAllSuperClassMinecraftMethods(): List<ClassApi.Method> {
-//        //  ClassApi(Foo)
-//        var classApiOfCurrent: ClassApi = classApi
-//
-//        var currentSuperClass: JavaClassType
-//
-//        var methods = listOf<ClassApi.Method>()
-//        while (true) {
-//            // ClassApi(Foo<T>)
-//            val currentSubClass = classApiOfCurrent
-//            // Bar<String>
-//            currentSuperClass = classApiOfCurrent.superClass ?: return methods
-//            // ClassApi(Bar<T>)
-//            // If it's null then it means we've reached a non-mc superclass
-//            classApiOfCurrent = mcClasses[currentSuperClass.type.toJvmQualifiedName()] ?: return methods
-//
-//            // [<T> bar(t1: T1, t: T)]
-//            val allMethodsBeforeInlining = (methods + classApiOfCurrent.methods)
-//            // [<T_OVERRIDE> bar(t1: T1, t: T_OVERRIDE)]
-//            val allMethodsConflictsResolved =
-//                allMethodsBeforeInlining.map { it.resolveTypeVariableNameConflicts(currentSubClass) }
-//
-//            // [<T_OVERRIDE> bar(t1: String, t: T_OVERRIDE)]
-//            methods = allMethodsConflictsResolved
-//                .map { it.inlineContainedTypes(currentSuperClass, classApiOfCurrent.typeArguments) }
-//        }
-//    }
-
 
     // When a class has <T> defined, and the method defines a type argument <T>, rename <T> of the method to <T_OVERRIDE>
     private fun ClassApi.Method.resolveTypeVariableNameConflicts(classApi: ClassApi): ClassApi.Method {
@@ -849,10 +838,6 @@ private data class ClassAbstractor(
         superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
     ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
 
-    //
-//    private fun TypeArgumentDeclaration.inlineTypeVariables(
-//        superClassType: JavaClassType, superClassTypeArgDecls: List<TypeArgumentDeclaration>
-//    ) = mapTypeVariables { it.inlineTypeVariable(superClassType, superClassTypeArgDecls) }
 
     private fun ClassApi.Method.mapTypeVariables(
         mapper: (TypeVariable) -> GenericType
@@ -874,9 +859,6 @@ private data class ClassAbstractor(
 
     private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
         with(metadata.versionPackage) { remapToApiClass() }
-
-//    private fun <T : GenericReturnType> JavaType<T>.remapToBaseClass(): JavaType<T> =
-//        with(metadata.versionPackage) { remapToBaseClass() }
 
     private fun <T : GenericReturnType> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }
@@ -918,14 +900,10 @@ internal fun VersionPackage.allApiInterfaceTypeArguments(classApi: ClassApi): Li
 }
 
 private const val ConflictingTypeVariableSuffix = "_OVERRIDE"
-
-private val SuperTypedPackage = PackageName(listOf("febb", "apiruntime"))
-private const val SuperTypedName = "SuperTyped"
-private val EnumPackage = PackageName(listOf("java", "lang"))
-private const val EnumName = "Enum"
+private const val factoryMethodName = "create"
 
 private const val BooleanGetterPrefix = "is"
 private const val ArrayFactoryName = "array"
 private const val ArrayFactorySizeParamName = "size"
-private val NotNullAnnotation = JavaAnnotation(ObjectType("org/jetbrains/annotations/NotNull", dotQualified = false))
-private val OverrideAnnotation = JavaAnnotation(ObjectType("java/lang/Override", dotQualified = false))
+private val NotNullAnnotation =
+    JavaAnnotation(ObjectType("org/jetbrains/annotations/NotNull", dotQualified = false), parameters = mapOf())
