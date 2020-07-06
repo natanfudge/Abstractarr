@@ -64,9 +64,8 @@ class TestAbstraction {
         apiSrcDest.convertDirToJar()
     }
 
-    //TODO: annotation values in java
-    //TODO: multithreading
     //TODO: test javadocs
+    //TODO: multithreading
 
     @Test
     @Disabled
