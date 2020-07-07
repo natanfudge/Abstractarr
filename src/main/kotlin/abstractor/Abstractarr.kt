@@ -2,6 +2,10 @@ package abstractor
 
 import api.*
 import codegeneration.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import metautils.codegeneration.asm.AsmCodeGenerator
 import kotlinx.serialization.Serializable
 import metautils.codegeneration.asm.toAsmAccess
@@ -38,14 +42,18 @@ typealias AbstractionManifest = Map<String, AbstractedClassInfo>
 @Serializable
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
-class Abstractor private constructor(
+class Abstractor /*private*/ constructor(
     private val classes: Collection<ClassApi>,
     private val classNamesToClasses: Map<QualifiedName, ClassApi>,
     private val index: ClasspathIndex
 ) {
 
     companion object {
-        fun parse(mcJar: Path, metadata: AbstractionMetadata, usage: (Abstractor) -> Unit): AbstractionManifest {
+        inline fun parse(
+            mcJar: Path,
+            metadata: AbstractionMetadata,
+            crossinline usage: (Abstractor) -> Unit
+        ): AbstractionManifest {
             val classes = ClassApi.readFromJar(mcJar) { path ->
                 path.toString().let { it.startsWith("/net/minecraft/") || it.startsWith("/com/mojang/blaze3d") }
             }
@@ -71,16 +79,23 @@ class Abstractor private constructor(
         destDir.deleteRecursively()
         destDir.createDirectory()
 
-        for (classApi in classes) {
-            if (!classApi.isPublicApi) continue
-            ClassAbstractor(metadata, index, classApi, classNamesToClasses)
-                .abstractClass(destPath = destDir)
+        runBlocking {
+            coroutineScope {
+                for (classApi in classes) {
+                    if (!classApi.isPublicApi) continue
+                    launch(Dispatchers.Default) {
+                        ClassAbstractor(metadata, index, classApi, classNamesToClasses)
+                            .abstractClass(destPath = destDir)
+                    }
+                }
+            }
         }
+
     }
 }
 
 
-private fun buildAbstractionManifest(
+/*private*/ fun buildAbstractionManifest(
     classes: Collection<ClassApi>,
     version: VersionPackage
 ): AbstractionManifest = with(version) {
@@ -103,7 +118,7 @@ private fun buildAbstractionManifest(
     }.toMap()
 }
 
-private fun listAllGeneratedClasses(
+/*private*/ fun listAllGeneratedClasses(
     classes: Collection<ClassApi>,
     metadata: AbstractionMetadata
 ): Map<QualifiedName, ClassEntry> = with(metadata.versionPackage) {

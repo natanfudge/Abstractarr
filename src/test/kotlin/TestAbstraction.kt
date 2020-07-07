@@ -93,12 +93,10 @@ class TestAbstraction {
             it.abstract(srcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
         }
 
-        verifyClassFiles(implDest, classpath + listOf(mcJar))
+//        verifyClassFiles(implDest, classpath + listOf(mcJar))
 
     }
-
-    //        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
-
+    
     private fun testJavadocs(): JavaDocs {
         val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toQualifiedName(dotQualified = false))
         val testField = Documentable.Field(testClass, "publicField")
