@@ -1,3 +1,5 @@
+package abstractor
+
 import metautils.api.JavaType
 import metautils.api.remap
 import metautils.descriptor.*

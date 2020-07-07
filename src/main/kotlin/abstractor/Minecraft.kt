@@ -1,3 +1,5 @@
+package abstractor
+
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
 import kotlinx.serialization.json.JsonObject
@@ -18,20 +20,24 @@ object Minecraft {
             .map { it.jsonObject }
             .find { it.getPrimitive("id").content == version }
             ?.getPrimitive("url")?.content
-            ?: error("No such Minecraft version '$version'")
+            ?: error("No such abstractor.Minecraft version '$version'")
         return json.parseJson(downloadUtfStringFromUrl(url)).jsonObject
     }
 
     fun getLibraryUrls(versionManifest: JsonObject): List<Library> {
         return versionManifest.getArray("libraries").map {
             val artifact = it.jsonObject.getObject("downloads").getObject("artifact")
-            Library(artifact.getPrimitive("url").content, artifact.getPrimitive("path").content)
+            Library(
+                artifact.getPrimitive("url").content,
+                artifact.getPrimitive("path").content
+            )
         }.distinctBy { it.filePath }
     }
 
-    fun downloadLibraryUrlsFor(version: String): List<Library> = getLibraryUrls(
-        downloadVersionManifest(
-            downloadVersionManifestList(), version
+    fun downloadLibraryUrlsFor(version: String): List<Library> =
+        getLibraryUrls(
+            downloadVersionManifest(
+                downloadVersionManifestList(), version
+            )
         )
-    )
 }

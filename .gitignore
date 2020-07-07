@@ -7,3 +7,4 @@ out/
 testdata/
 src/test/resources/mclibs/*
 src/test/resources/minecraft-1.16.1/*
+src/test/resources/yarn-1.16.1+build.5-v2.tiny

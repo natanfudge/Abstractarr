@@ -1,5 +1,5 @@
-import api.ClassApi
-import metautils.api.getJvmDescriptor
+package abstractor
+
 import metautils.descriptor.MethodDescriptor
 import metautils.descriptor.read
 import metautils.util.QualifiedName
@@ -34,22 +34,22 @@ class JavaDocs(
     fun getMethodDoc(doc: Documentable.Method) = methods[doc]
     fun getFieldDoc(doc: Documentable.Field) = fields[doc]
     fun getParameterDoc(doc: Documentable.Parameter) = parameters[doc]
-//    fun getClassDoc(className: QualifiedName): String? = classes[Documentable.Class(className)]
+//    fun getClassDoc(className: QualifiedName): String? = classes[abstractor.Documentable.Class(className)]
 //
 //    fun getMethodDoc(className: QualifiedName, methodName: String, descriptor: MethodDescriptor): String? {
-//        return methods[Documentable.Method(Documentable.Class(className), methodName, descriptor)]
+//        return methods[abstractor.Documentable.Method(abstractor.Documentable.Class(className), methodName, descriptor)]
 //    }
 //
 //    fun getParameterDoc(
 //        className: QualifiedName, methodName: String, descriptor: MethodDescriptor, index: Int
 //    ): String? {
-//        return parameters[Documentable.Parameter(
-//            Documentable.Method(Documentable.Class(className), methodName, descriptor), index
+//        return parameters[abstractor.Documentable.Parameter(
+//            abstractor.Documentable.Method(abstractor.Documentable.Class(className), methodName, descriptor), index
 //        )]
 //    }
 //
 //    fun getFieldDoc(className: QualifiedName, fieldName: String): String? {
-//        return fields[Documentable.Field(Documentable.Class(className), fieldName)]
+//        return fields[abstractor.Documentable.Field(abstractor.Documentable.Class(className), fieldName)]
 //    }
 
     companion object {
@@ -61,11 +61,18 @@ class JavaDocs(
         }
 
         private fun MethodDef.documentable(parentClass: ClassDef): Documentable.Method {
-            return Documentable.Method(parentClass.documentable(), yarnName(), MethodDescriptor.read(yarnDescriptor()))
+            return Documentable.Method(
+                parentClass.documentable(),
+                yarnName(),
+                MethodDescriptor.read(yarnDescriptor())
+            )
         }
 
         private fun ParameterDef.documentable(parentMethod: MethodDef, parentClass: ClassDef): Documentable.Parameter {
-            return Documentable.Parameter(parentMethod.documentable(parentClass), localVariableIndex)
+            return Documentable.Parameter(
+                parentMethod.documentable(parentClass),
+                localVariableIndex
+            )
         }
 
         private fun FieldDef.documentable(parentClass: ClassDef): Documentable.Field {

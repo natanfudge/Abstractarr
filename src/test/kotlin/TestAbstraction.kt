@@ -1,3 +1,4 @@
+import abstractor.*
 import metautils.asm.readToClassNode
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
@@ -34,6 +35,7 @@ class TestAbstraction {
         val mcJar = getResource("testOriginalJar.jar")
         val implDest = mcJar.parent.resolve("abstractedAsm")
         val apiDest = mcJar.parent.resolve("abstractedAsmApi")
+        val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources")
 
 
         val metadata = AbstractionMetadata(
@@ -42,15 +44,21 @@ class TestAbstraction {
             createBaseClassesFor = { !it.isInnerClass || (it.isStatic && !it.isProtected) },
             javadocs = testJavadocs()
         )
-        Abstractor.abstract(mcJar, implDest, metadata = metadata)
-        verifyClassFiles(implDest, listOf(mcJar))
-        val manifest = Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
+        val manifest = Abstractor.parse(mcJar, metadata) { abstractor ->
+            abstractor.abstract(implDest, metadata)
+            abstractor.abstract(apiDest, metadata = metadata.copy(fitToPublicApi = true))
+            abstractor.abstract(apiSrcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
+        }
+
         val manifestJson = Json(
             JsonConfiguration(prettyPrint = true)
         ).stringify(
             MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
             manifest
         )
+
+        verifyClassFiles(implDest, listOf(mcJar))
+
         Paths.get("testdata").createDirectories()
         Paths.get("testdata/abstractionManifest.json").writeString(manifestJson)
 
@@ -59,12 +67,10 @@ class TestAbstraction {
         implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
         apiDest.convertDirToJar()
-        val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources")
-        Abstractor.abstract(mcJar, apiSrcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
         apiSrcDest.convertDirToJar()
+
     }
 
-    //TODO: test javadocs
     //TODO: multithreading
 
     @Test
@@ -73,18 +79,25 @@ class TestAbstraction {
         val mcJar = getResource("minecraft-1.16.1.jar")
         val implDest = mcJar.parent.resolve("abstractedMcImpl")
         val apiDest = mcJar.parent.resolve("abstractedMcApi")
+        val srcDest = mcJar.parent.resolve("abstractMcApi-sources")
         val classpath = getResource("mclibs").recursiveChildren().filter { it.hasExtension(".jar") }.toList()
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
             classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
             createBaseClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/Block" },
-            javadocs = JavaDocs.Empty
+            javadocs = JavaDocs.readTiny(getResource("yarn-1.16.1+build.5-v2.tiny"))
         )
-        Abstractor.abstract(mcJar, implDest, metadata)
-        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
+        Abstractor.parse(mcJar, metadata) {
+            it.abstract(implDest, metadata)
+            it.abstract(apiDest, metadata = metadata.copy(fitToPublicApi = true))
+            it.abstract(srcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
+        }
+
         verifyClassFiles(implDest, classpath + listOf(mcJar))
-        Abstractor.abstract(mcJar, apiDest, metadata = metadata.copy(fitToPublicApi = true))
+
     }
+
+    //        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
     private fun testJavadocs(): JavaDocs {
         val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toQualifiedName(dotQualified = false))

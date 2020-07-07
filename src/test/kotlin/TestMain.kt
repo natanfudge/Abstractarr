@@ -4,7 +4,7 @@ import metautils.util.*
 
 fun main() {
 //    val root = Paths.get("src/test/resources/mclibs")
-//    val libs = Minecraft.downloadLibraryUrlsFor(version = "1.16.1")
+//    val libs = abstractor.Minecraft.downloadLibraryUrlsFor(version = "1.16.1")
 //    for ((url, path) in libs) {
 //        val dest = root.resolve(path)
 //        println("Downloading $url to $path")
