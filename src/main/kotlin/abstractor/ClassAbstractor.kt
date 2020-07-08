@@ -1,6 +1,6 @@
 package abstractor
 
-import api.ClassApi
+import metautils.api.ClassApi
 import codegeneration.*
 import metautils.api.*
 import metautils.codegeneration.*
@@ -18,7 +18,8 @@ internal data class ClassAbstractor(
     private val metadata: AbstractionMetadata,
     private val index: ClasspathIndex,
     private val classApi: ClassApi,
-    private val mcClasses: Map<QualifiedName, ClassApi>
+    private val mcClasses: Map<QualifiedName, ClassApi>,
+    private val stubClasses: Set<QualifiedName>
 ) {
     fun abstractClass(destPath: Path) {
         check(classApi.visibility == ClassVisibility.Public)
@@ -33,15 +34,15 @@ internal data class ClassAbstractor(
 
     private fun JavaClassType.isAvailableAsPublicApi(): Boolean {
         if (!isMcClass()) return true
-        return mcClasses.getValue(type.toJvmQualifiedName()).isPublicApi
+        return mcClasses.getValue(type.toJvmQualifiedName()).isPublicApiAsOutermostMember
     }
 
     // Sometimes mc stupidly inherits non-public classes in public classes so we need to filter them out
     private fun publicSuperInterface() =
         classApi.superInterfaces.filter { it.isAvailableAsPublicApi() }
 
-    fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
-        if (!metadata.createBaseClassesFor(classApi)) return@with
+    private fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
+        if (!metadata.selector.classes(classApi)) return@with
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
@@ -77,8 +78,27 @@ internal data class ClassAbstractor(
      * destPath == null and outerClass != null when it's an inner class
      */
     fun createApiInterface(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
-        // No need to add I for inner classes
         val (packageName, shortName) = apiClassName(outerClass) { it.toApiClass() }
+
+        if (!metadata.selector.classes(classApi)) {
+            if (classApi.name in stubClasses) {
+                writeClass(destPath, ClassInfo(
+                    visibility = Visibility.Public,
+                    access = apiInterfaceAccess(metadata),
+                    shortName = shortName.innermostClass(),
+                    typeArguments = listOf(),
+                    superClass = null,
+                    annotations = listOf(),
+                    superInterfaces = listOf(),
+                    body = {
+                        getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
+                    }
+                ), packageName, outerClass, isInnerClassStatic = true)
+            }
+            return@with
+        }
+
+        // No need to add I for inner classes
 
 
         // If it's not a mc class then we add an asSuper() method
@@ -126,6 +146,36 @@ internal data class ClassAbstractor(
         }
     }
 
+    private fun ClassApi.Field.isAccessibleAsPublicApi() = type.getContainedNamesRecursively().all {
+        val classApi = mcClasses[it] ?: return@all true
+        classApi.isPublicApi
+    }
+
+    private fun ClassApi.Method.isAccessibleAsPublicApi() = getAllReferencedClassesRecursively().all {
+        val classApi = mcClasses[it] ?: return@all true
+        classApi.isPublicApi
+    }
+
+//    // Need to filter out fields which use private api
+//    fun ClassApi.getFieldsAccessibleAsPublicApi() = fields
+//        .filter { field ->
+//            field.type.getContainedNamesRecursively().all {
+//                val classApi = mcClasses[it] ?: return@all true
+//                classApi.isPublicApi
+//            }
+//        }
+//
+//    // Need to filter out methods which use private api
+//    fun ClassApi.getMethodsAccessibleAsPublicApi() = methods
+//        .filter { method ->
+//            method.getAllReferencedClassesRecursively().all {
+//                val classApi = mcClasses[it] ?: return@all true
+//                classApi.isPublicApi
+//            }
+//        }
+
+//    private fun
+
     private fun GeneratedClass.addBaseclassBody() {
         for (method in classApi.methods) {
             if ((method.isPublic || method.isProtected) && method.isConstructor) {
@@ -138,7 +188,9 @@ internal data class ClassAbstractor(
         // of the superclasses
         for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
             // Constructors are handled separately above
-            if (method.isConstructor) continue
+            if (method.isConstructor || !method.isAccessibleAsPublicApi()
+                || !metadata.selector.methods(classApi, method).addInBaseclass
+            ) continue
             val containsMc = method.descriptorContainsMcClasses()
             if (method.isPublic || method.isProtected) {
                 // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
@@ -179,7 +231,11 @@ internal data class ClassAbstractor(
         }
 
         for (field in classApi.fields) {
-            if (field.isProtected) abstractField(field, castSelf = false)
+            if (field.isProtected && field.isAccessibleAsPublicApi()
+                && metadata.selector.fields(classApi, field).addInBaseclass
+            ) {
+                abstractField(field, castSelf = false)
+            }
         }
 
         for (innerClass in classApi.innerClasses) {
@@ -200,7 +256,9 @@ internal data class ClassAbstractor(
     private fun GeneratedClass.addApiInterfaceBody() {
         /*if (!classApi.isThrowable(index))*/ addAsSuperMethod()
         for (method in classApi.methods) {
-            if (method.isPublic) {
+            if (method.isPublic && method.isAccessibleAsPublicApi()
+                && metadata.selector.methods(classApi, method).addInInterface
+            ) {
                 if (method.isConstructor) addApiInterfaceFactory(method)
                 else {
                     // Don't duplicate methods that are just being overriden in the impl jar.
@@ -215,10 +273,14 @@ internal data class ClassAbstractor(
         }
 
         for (field in classApi.fields) {
-            if (field.isPublic) abstractField(field, castSelf = true)
+            if (field.isPublic && field.isAccessibleAsPublicApi()
+                && metadata.selector.fields(classApi, field).addInInterface
+            ) {
+                abstractField(field, castSelf = true)
+            }
         }
         for (innerClass in classApi.innerClasses) {
-            if (innerClass.isPublic || innerClass.isProtected) {
+            if (innerClass.isPublicApiAsOutermostMember) {
                 copy(classApi = innerClass).createApiInterface(destPath = null, outerClass = this)
             }
 

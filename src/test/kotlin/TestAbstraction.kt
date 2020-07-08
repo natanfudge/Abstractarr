@@ -42,7 +42,8 @@ class TestAbstraction {
             versionPackage = VersionPackage("v1"),
             classPath = listOf(), fitToPublicApi = false, writeRawAsm = true,
             createBaseClassesFor = { !it.isInnerClass || (it.isStatic && !it.isProtected) },
-            javadocs = testJavadocs()
+            javadocs = testJavadocs(),
+            createApiClassesFor = { it.name.shortName.toDollarQualifiedString() == "TestConcreteClass" }
         )
         val manifest = Abstractor.parse(mcJar, metadata) { abstractor ->
             abstractor.abstract(implDest, metadata)
@@ -71,10 +72,9 @@ class TestAbstraction {
 
     }
 
-    //TODO: multithreading
 
     @Test
-    @Disabled
+//    @Disabled
     fun testMc() {
         val mcJar = getResource("minecraft-1.16.1.jar")
         val implDest = mcJar.parent.resolve("abstractedMcImpl")
@@ -84,19 +84,29 @@ class TestAbstraction {
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
             classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
-            createBaseClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/Block" },
-            javadocs = JavaDocs.readTiny(getResource("yarn-1.16.1+build.5-v2.tiny"))
+            createBaseClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/block/Block" },
+            javadocs = JavaDocs.readTiny(getResource("yarn-1.16.1+build.5-v2.tiny")),
+            createApiClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/block/Block" }
         )
-        Abstractor.parse(mcJar, metadata) {
+        val manifest = Abstractor.parse(mcJar, metadata) {
             it.abstract(implDest, metadata)
             it.abstract(apiDest, metadata = metadata.copy(fitToPublicApi = true))
             it.abstract(srcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
         }
 
-//        verifyClassFiles(implDest, classpath + listOf(mcJar))
+        val manifestJson = Json(
+            JsonConfiguration(prettyPrint = true)
+        ).stringify(
+            MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
+            manifest
+        )
+
+        Paths.get("mcmanifest.json").writeString(manifestJson)
+
+        verifyClassFiles(implDest, classpath + listOf(mcJar))
 
     }
-    
+
     private fun testJavadocs(): JavaDocs {
         val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toQualifiedName(dotQualified = false))
         val testField = Documentable.Field(testClass, "publicField")

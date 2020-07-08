@@ -1,6 +1,5 @@
 package abstractor
 
-import api.*
 import metautils.asm.opCode
 import metautils.api.*
 import metautils.signature.ArrayGenericType

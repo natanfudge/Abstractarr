@@ -1,39 +1,48 @@
 package abstractor
 
-import api.*
 import codegeneration.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import metautils.codegeneration.asm.AsmCodeGenerator
 import kotlinx.serialization.Serializable
 import metautils.codegeneration.asm.toAsmAccess
 import metautils.api.*
-import metautils.codegeneration.*
-import metautils.descriptor.JvmPrimitiveType
-import metautils.descriptor.JvmType
-import metautils.descriptor.ObjectType
-import metautils.descriptor.ReturnDescriptor
 import metautils.signature.*
 import metautils.util.*
-import metautils.signature.annotated
-import metautils.signature.noAnnotations
-import metautils.signature.toJvmQualifiedName
-import metautils.signature.toJvmType
 import metautils.util.createDirectory
 import metautils.util.deleteRecursively
 import metautils.util.exists
 import metautils.util.isDirectory
 import java.nio.file.Path
 
+enum class AbstractionType {
+    None,
+    Interface,
+    Baseclass,
+    BaseclassAndInterface;
+
+    val isAbstracted get() = this != None
+    val addInInterface get() = this == Interface || this  == BaseclassAndInterface
+    val addInBaseclass get() = this == Baseclass || this  == BaseclassAndInterface
+}
+
+data class TargetSelector(
+    val classes: (ClassApi) -> Boolean,
+    val methods: (ClassApi, ClassApi.Method) -> AbstractionType,
+    val fields: (ClassApi, ClassApi.Field) -> AbstractionType
+)
 
 data class AbstractionMetadata(
+    // A string prefix for api packages
     val versionPackage: VersionPackage,
+    // Libraries used in the abstracted jar
     val classPath: List<Path>,
+    // Whether to produce an api that won't be usable for runtime, but is rather suited for compiling against in dev
     val fitToPublicApi: Boolean,
     val writeRawAsm: Boolean,
-    val createBaseClassesFor: (ClassApi) -> Boolean,
+    // Classes/methods/fields that will be abstracted
+    val selector: TargetSelector,
     val javadocs: JavaDocs
 )
 /** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
@@ -45,7 +54,10 @@ data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Bool
 class Abstractor /*private*/ constructor(
     private val classes: Collection<ClassApi>,
     private val classNamesToClasses: Map<QualifiedName, ClassApi>,
-    private val index: ClasspathIndex
+//    private val classRanks: Map<QualifiedName, Int>,
+    private val index: ClasspathIndex,
+    // Classes that won't be abstracted, but will have a stub api interface so they can be referenced from elsewhere
+    private val stubClasses: Set<QualifiedName>
 ) {
 
     companion object {
@@ -66,7 +78,13 @@ class Abstractor /*private*/ constructor(
             val additionalEntries = listAllGeneratedClasses(classes, metadata)
 
             return ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries) {
-                usage(Abstractor(classes, classNamesToClasses, it))
+                usage(
+                    Abstractor(
+                        classes, classNamesToClasses,
+                        stubClasses = getReferencedClasses(classNamesToClasses.values,metadata.selector)
+                        , index = it
+                    )
+                )
                 buildAbstractionManifest(classes, metadata.versionPackage)
             }
         }
@@ -82,9 +100,9 @@ class Abstractor /*private*/ constructor(
         runBlocking {
             coroutineScope {
                 for (classApi in classes) {
-                    if (!classApi.isPublicApi) continue
-                    launch(Dispatchers.Default) {
-                        ClassAbstractor(metadata, index, classApi, classNamesToClasses)
+                    if (!classApi.isPublicApiAsOutermostMember) continue
+                    launch(Dispatchers.IO) {
+                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, stubClasses)
                             .abstractClass(destPath = destDir)
                     }
                 }
@@ -94,13 +112,54 @@ class Abstractor /*private*/ constructor(
     }
 }
 
+@PublishedApi
+internal fun getReferencedClasses(
+    allClasses: Collection<ClassApi>,
+    selected: TargetSelector
+): Set<QualifiedName> {
+    return allClasses.filter { selected.classes(it) }
+        .flatMap { it.getAllReferencedClasses(selected) }.toSet()
+}
 
-/*private*/ fun buildAbstractionManifest(
+//private data class ClassRank(val name: QualifiedName, val rank: Int?)
+
+// Checks what classes the first class classes reference, then what they reference, then what they reference, etc
+// The first class classes have a rank of 1, what they reference has a rank of 2, and everything rank 2 references
+// that has not been referenced yet has a rank of 3, etc
+// unreferenced classes have a rank of null
+//fun rankClasses(
+//    classes: Map<QualifiedName, ClassApi>,
+//    firstClassClasses: (ClassApi) -> Boolean
+//): Map<QualifiedName, Int> {
+//    var currentRank = 1
+//    val rankedClasses = mutableMapOf<QualifiedName, Int>()
+//
+//    var currentClassesToRank: List<QualifiedName> = classes.filter { firstClassClasses(it.value) }.keys.toList()
+//    do {
+//        currentClassesToRank.forEach { rankedClasses[it] = currentRank }
+//
+//        currentRank++
+//        val nextClassesToRank = currentClassesToRank.flatMap { classes.getValue(it).getAllReferencedClasses() }
+//            .filter { it.isMcClassName() && !rankedClasses.containsKey(it) && classes.getValue(it).isPublicApi }
+//            .map { it }
+//        currentClassesToRank = nextClassesToRank
+//    } while (nextClassesToRank.isNotEmpty())
+//
+//    println("Total classes = ${classes.size}")
+//    println("Included classes = ${rankedClasses.size}")
+//    println("Directly referenced classes = ${rankedClasses.filter { it.value == 2 }.size}")
+//
+//    return rankedClasses
+//}
+
+
+@PublishedApi
+internal fun buildAbstractionManifest(
     classes: Collection<ClassApi>,
     version: VersionPackage
 ): AbstractionManifest = with(version) {
     classes.flatMap { outerClass ->
-        outerClass.allInnerClassesAndThis().map { mcClass ->
+        outerClass.allInnerClassesAndThis().filter { it.isPublicApi }.map { mcClass ->
             val mcClassName = mcClass.name.toSlashQualifiedString()
             val apiClass = mcClass.name.toApiClass()
             val oldSignature = mcClass.getSignature()
@@ -118,7 +177,8 @@ class Abstractor /*private*/ constructor(
     }.toMap()
 }
 
-/*private*/ fun listAllGeneratedClasses(
+@PublishedApi
+internal fun listAllGeneratedClasses(
     classes: Collection<ClassApi>,
     metadata: AbstractionMetadata
 ): Map<QualifiedName, ClassEntry> = with(metadata.versionPackage) {
