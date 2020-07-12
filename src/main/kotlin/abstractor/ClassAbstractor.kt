@@ -1,6 +1,5 @@
 package abstractor
 
-import metautils.api.ClassApi
 import codegeneration.*
 import metautils.api.*
 import metautils.codegeneration.*
@@ -42,7 +41,7 @@ internal data class ClassAbstractor(
         classApi.superInterfaces.filter { it.isAvailableAsPublicApi() }
 
     private fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
-        if (!metadata.selector.classes(classApi)) return@with
+        if (!metadata.selector.classes(classApi).addInBaseclass) return@with
 
         val (packageName, shortName) = apiClassName(outerClass) { it.toBaseClass() }
 
@@ -80,7 +79,7 @@ internal data class ClassAbstractor(
     fun createApiInterface(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         val (packageName, shortName) = apiClassName(outerClass) { it.toApiClass() }
 
-        if (!metadata.selector.classes(classApi)) {
+        if (!metadata.selector.classes(classApi).addInInterface) {
             if (classApi.name in stubClasses) {
                 writeClass(destPath, ClassInfo(
                     visibility = Visibility.Public,
@@ -176,29 +175,41 @@ internal data class ClassAbstractor(
 
 //    private fun
 
-    private fun GeneratedClass.addBaseclassBody() {
-        for (method in classApi.methods) {
-            if ((method.isPublic || method.isProtected) && method.isConstructor) {
-                addBaseclassConstructor(method)
-            }
+    private data class BaseclassMethodsAddedInfo(
+        val apiMethods: List<ClassApi.Method>,
+        val bridgeMethods: List<ClassApi.Method>
+    )
+
+//    private data class BaseClassMethodAddedInfo()
+
+    private fun methodsAddedInBaseclass(allMethods: List<ClassApi.Method>): BaseclassMethodsAddedInfo {
+        val distinctMethods = allMethods.distinctBy { it.uniqueIdentifier() }
+        val relevantMethods = distinctMethods.filter {
+            // Constructors are handled separately
+            !it.isConstructor && it.isAccessibleAsPublicApi()
+                    && metadata.selector.methods(classApi, it).addInBaseclass
         }
 
-        val methodsIncludingSupers = classApi.getAllMinecraftMethodsIncludingSupers()
+        val bridgeMethods = relevantMethods.filter { method ->
+            val containsMc = method.descriptorContainsMcClasses()
+            if (!method.isPublic && !method.isProtected) return@filter false
+
+            // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
+            // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
+            // it will be called in the api as well (without needing a bridge method)
+            return@filter containsMc
+        }
+
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
-        for (method in methodsIncludingSupers.distinctBy { it.name + it.getJvmDescriptor().classFileName }) {
-            // Constructors are handled separately above
+        val apiMethods = distinctMethods.filter { method ->
+            // Constructors are handled separately
             if (method.isConstructor || !method.isAccessibleAsPublicApi()
                 || !metadata.selector.methods(classApi, method).addInBaseclass
-            ) continue
+            ) return@filter false
             val containsMc = method.descriptorContainsMcClasses()
-            if (method.isPublic || method.isProtected) {
-                // The purpose of bridge methods is to get calls from mc to call the methods from the api, but when
-                // there is no mc classes involved the methods are the same as the mc ones, so when mc calls the method
-                // it will be called in the api as well (without needing a bridge method)
-                if (containsMc) addBridgeMethod(method)
-            }
-            val addApiMethod = if (method.isProtected || (method.isPublic && classApi.isProtected)) {
+
+            return@filter if (method.isProtected || (method.isPublic && classApi.isProtected)) {
                 // Multiple things to consider here.
                 // 1. In the implementation jar (fitToPublicApi = false), there's no need to add methods that don't contain
                 // mc classes, because when an api user calls a method without mc classes, the jvm will just look up
@@ -223,24 +234,39 @@ internal data class ClassAbstractor(
                 if (metadata.fitToPublicApi) classApi.isSamInterface() && method.isAbstract
                 else !method.isStatic && containsMc
             } else false
+        }
+        return BaseclassMethodsAddedInfo(apiMethods, bridgeMethods)
+    }
 
-            if (addApiMethod) {
-                addApiDeclaredMethod(method, callSuper = true, forceBody = false)
+    private fun GeneratedClass.addBaseclassBody() {
+        for (method in classApi.methods) {
+            if ((method.isPublic || method.isProtected) && method.isConstructor) {
+                addBaseclassConstructor(method)
             }
-
         }
 
+        val allMethods = classApi.getAllMinecraftMethodsIncludingSupers()
+        val (apiMethods, bridgeMethods) = methodsAddedInBaseclass(allMethods)
+        for (method in bridgeMethods) addBridgeMethod(method)
+        for (method in apiMethods) {
+            addApiDeclaredMethod(method, callSuper = true, forceBody = false)
+        }
+
+        val existingMethods = (apiMethods + bridgeMethods +
+                // We don't want to override final methods accidentally with a getter/setter
+                allMethods.filter { it.isFinal })
+            .distinctBy { it.uniqueIdentifier() }
         for (field in classApi.fields) {
             if (field.isProtected && field.isAccessibleAsPublicApi()
                 && metadata.selector.fields(classApi, field).addInBaseclass
             ) {
-                abstractField(field, castSelf = false)
+                abstractField(field, castSelf = false, existingMethods = existingMethods)
             }
         }
 
         for (innerClass in classApi.innerClasses) {
             if ((innerClass.isPublic || innerClass.isProtected) && !innerClass.isFinal) {
-                copy(classApi = innerClass).createBaseclass(destPath = null, outerClass = this)
+                copy(classApi = innerClass).createBaseclass(outerClass = this, destPath = null)
             }
 
             // soft to do: make it possible to construct protected inner classes somehow, right
@@ -253,30 +279,46 @@ internal data class ClassAbstractor(
         if (classApi.isProtected) addArrayFactory()
     }
 
+    private data class ApiInterfaceMethodsAddedInfo(
+        val apiMethods: List<ClassApi.Method>,
+        val factories: List<ClassApi.Method>
+    )
+
+
+    private fun methodsAddedInApiInterface(): ApiInterfaceMethodsAddedInfo {
+        val relevantMethods = classApi.methods.filter {
+            it.isPublic && it.isAccessibleAsPublicApi()
+                    && metadata.selector.methods(classApi, it).addInInterface
+        }
+
+        val factories = relevantMethods.filter { it.isConstructor }
+        val apiMethods = relevantMethods.filter { method ->
+            if (method.isConstructor) return@filter false
+
+            // Don't duplicate methods that are just being overriden in the impl jar.
+            // In the api jar we need to make it obvious there's no need to override that method yourself.
+            return@filter !method.isOverride(index, classApi)
+                    || (metadata.fitToPublicApi && method.isOnlyImplementingOverride(index, classApi))
+
+        }
+
+        return ApiInterfaceMethodsAddedInfo(apiMethods, factories)
+    }
+
     private fun GeneratedClass.addApiInterfaceBody() {
-        /*if (!classApi.isThrowable(index))*/ addAsSuperMethod()
-        for (method in classApi.methods) {
-            if (method.isPublic && method.isAccessibleAsPublicApi()
-                && metadata.selector.methods(classApi, method).addInInterface
-            ) {
-                if (method.isConstructor) addApiInterfaceFactory(method)
-                else {
-                    // Don't duplicate methods that are just being overriden in the impl jar.
-                    // In the api jar we need to make it obvious there's no need to override that method yourself.
-                    if (!method.isOverride(index, classApi)
-                        || (metadata.fitToPublicApi && method.isOnlyImplementingOverride(index, classApi))
-                    ) {
-                        addApiDeclaredMethod(method, callSuper = false, forceBody = classApi.isSamInterface())
-                    }
-                }
-            }
+        addAsSuperMethod()
+
+        val (apiMethods, factories) = methodsAddedInApiInterface()
+        for (factory in factories) addApiInterfaceFactory(factory)
+        for (method in apiMethods) {
+            addApiDeclaredMethod(method, callSuper = false, forceBody = classApi.isSamInterface())
         }
 
         for (field in classApi.fields) {
             if (field.isPublic && field.isAccessibleAsPublicApi()
                 && metadata.selector.fields(classApi, field).addInInterface
             ) {
-                abstractField(field, castSelf = true)
+                abstractField(field, castSelf = true, existingMethods = apiMethods)
             }
         }
         for (innerClass in classApi.innerClasses) {
@@ -481,15 +523,19 @@ internal data class ClassAbstractor(
     )
 
 
-    private fun GeneratedClass.abstractField(field: ClassApi.Field, castSelf: Boolean) {
+    private fun GeneratedClass.abstractField(
+        field: ClassApi.Field,
+        castSelf: Boolean,
+        existingMethods: List<ClassApi.Method>
+    ) {
         if (field.isFinal && field.isStatic) {
             addConstant(field)
         } else {
-            addGetter(field, castSelf)
+            addGetter(field, castSelf, existingMethods)
         }
 
         if (!field.isFinal) {
-            addSetter(field, castSelf)
+            addSetter(field, castSelf, existingMethods)
         }
     }
 
@@ -501,13 +547,17 @@ internal data class ClassAbstractor(
         )
     }
 
-    private fun GeneratedClass.addGetter(field: ClassApi.Field, castSelf: Boolean) {
+    private fun GeneratedClass.addGetter(
+        field: ClassApi.Field,
+        castSelf: Boolean,
+        existingMethods: List<ClassApi.Method>
+    ) {
         val getterName = field.getGetterPrefix() +
                 // When it starts with "is" no prefix is added so there's no need to capitalize
                 if (field.name.startsWith(BooleanGetterPrefix)) field.name else field.name.capitalize()
         addMethod(
             // Add _field when getter clashes with a method of the same name
-            name = getterName.applyIf(getterClashesWithMethod(getterName)) { it + "_field" },
+            name = getterName.applyIf(getterClashesWithMethod(getterName, existingMethods)) { it + "_field" },
             parameters = listOf(),
             visibility = field.visibility,
             returnType = field.type.remapToApiClass(),
@@ -527,22 +577,39 @@ internal data class ClassAbstractor(
         }
     }
 
-    private fun getterClashesWithMethod(getterName: String) =
-        classApi.methods.any { it.parameters.isEmpty() && it.name == getterName }
+    private fun getterClashesWithMethod(getterName: String, existingMethods: List<ClassApi.Method>) =
+        existingMethods.any { it.parameters.isEmpty() && it.name == getterName }
 
 
-    private fun setterClashesWithMethod(setterName: String, setterType: JvmType) = classApi.methods
-        .any { it.parameters.size == 1 && it.name == setterName && it.parameters[0].second.toJvmType() == setterType }
+    private fun setterClashesWithMethod(
+        setterName: String,
+        setterType: JvmType,
+        existingMethods: List<ClassApi.Method>
+    ): Boolean {
+        return existingMethods
+            .any { it.parameters.size == 1 && it.name == setterName && it.parameters[0].second.toJvmType() == setterType }
+    }
 
     private fun ClassApi.Field.getGetterPrefix(): String =
         if (type.type.let { it is GenericsPrimitiveType && it.primitive == JvmPrimitiveType.Boolean }) {
             if (name.startsWith(BooleanGetterPrefix)) "" else BooleanGetterPrefix
         } else "get"
 
-    private fun GeneratedClass.addSetter(field: ClassApi.Field, castSelf: Boolean) {
+    private fun GeneratedClass.addSetter(
+        field: ClassApi.Field,
+        castSelf: Boolean,
+        existingMethods: List<ClassApi.Method>
+    ) {
         val setterName = "set" + field.name.capitalize()
         addMethod(
-            name = setterName.applyIf(setterClashesWithMethod(setterName, field.type.toJvmType())) { it + "_field" },
+            name = setterName
+                .applyIf(
+                    setterClashesWithMethod(
+                        setterName,
+                        field.type.toJvmType(),
+                        existingMethods
+                    )
+                ) { it + "_field" },
             parameters = listOf(
                 ParameterInfo(
                     field.name,

@@ -1,3 +1,5 @@
+@file:Suppress("USELESS_IS_CHECK", "unused", "ObjectLiteralToLambda", "RedundantOverride")
+
 package test
 
 import net.minecraft.*
@@ -209,6 +211,10 @@ class TestBaseClasses {
         }.testClashingNamesCalls()
 
         with(object : BaseTestClashingNames(5) {
+            init {
+                assert(superWillFuckUp is ITestOtherClass)
+                assert(superWillFuckUp_field is ITestOtherClass?)
+            }
             override fun isSomeBool(): Boolean {
                 return true
             }

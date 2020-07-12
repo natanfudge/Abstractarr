@@ -27,11 +27,31 @@ enum class AbstractionType {
     val addInBaseclass get() = this == Baseclass || this  == BaseclassAndInterface
 }
 
+enum class ClassAbstractionType {
+    None,
+    Interface,
+    BaseclassAndInterface;
+
+    val isAbstracted get() = this != None
+    val addInInterface get() = this == Interface || this  == BaseclassAndInterface
+    val addInBaseclass get() = this  == BaseclassAndInterface
+}
+
 data class TargetSelector(
-    val classes: (ClassApi) -> Boolean,
+    val classes: (ClassApi) -> ClassAbstractionType,
     val methods: (ClassApi, ClassApi.Method) -> AbstractionType,
     val fields: (ClassApi, ClassApi.Field) -> AbstractionType
-)
+){
+    companion object{
+        val All = TargetSelector({
+            // Non-static inner class baseclasses are not supported yet
+            if(it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
+        else ClassAbstractionType.BaseclassAndInterface},
+            { _, _ -> AbstractionType.BaseclassAndInterface },
+            { _, _ -> AbstractionType.BaseclassAndInterface }
+        )
+    }
+}
 
 data class AbstractionMetadata(
     // A string prefix for api packages
@@ -117,7 +137,7 @@ internal fun getReferencedClasses(
     allClasses: Collection<ClassApi>,
     selected: TargetSelector
 ): Set<QualifiedName> {
-    return allClasses.filter { selected.classes(it) }
+    return allClasses.filter { selected.classes(it).isAbstracted }
         .flatMap { it.getAllReferencedClasses(selected) }.toSet()
 }
 

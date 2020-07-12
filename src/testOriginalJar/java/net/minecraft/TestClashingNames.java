@@ -1,7 +1,15 @@
 package net.minecraft;
 
-public class TestClashingNames {
+public class TestClashingNames extends TestClashingNamesSuper {
     public boolean someBool;
+
+    protected TestOtherClass superWillFuckUp;
+
+    protected int finalWillFuckUp;
+
+    public final int getFinalWillFuckUp() {
+        return finalWillFuckUp;
+    }
 
     public boolean isSomeBool() {
         return false;

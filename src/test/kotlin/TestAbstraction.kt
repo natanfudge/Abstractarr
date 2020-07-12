@@ -41,9 +41,8 @@ class TestAbstraction {
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
             classPath = listOf(), fitToPublicApi = false, writeRawAsm = true,
-            createBaseClassesFor = { !it.isInnerClass || (it.isStatic && !it.isProtected) },
-            javadocs = testJavadocs(),
-            createApiClassesFor = { it.name.shortName.toDollarQualifiedString() == "TestConcreteClass" }
+            selector = TargetSelector.All,
+            javadocs = testJavadocs()
         )
         val manifest = Abstractor.parse(mcJar, metadata) { abstractor ->
             abstractor.abstract(implDest, metadata)
@@ -84,9 +83,8 @@ class TestAbstraction {
         val metadata = AbstractionMetadata(
             versionPackage = VersionPackage("v1"),
             classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
-            createBaseClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/block/Block" },
-            javadocs = JavaDocs.readTiny(getResource("yarn-1.16.1+build.5-v2.tiny")),
-            createApiClassesFor = { it.name.toSlashQualifiedString() == "net/minecraft/block/Block" }
+            selector = TargetSelector.All,
+            javadocs = JavaDocs.readTiny(getResource("yarn-1.16.1+build.5-v2.tiny"))
         )
         val manifest = Abstractor.parse(mcJar, metadata) {
             it.abstract(implDest, metadata)
