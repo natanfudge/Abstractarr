@@ -5,10 +5,12 @@ import metautils.api.remap
 import metautils.descriptor.*
 import metautils.signature.*
 import metautils.util.*
-import metautils.signature.remap
-import metautils.signature.toJvmType
 
 class VersionPackage(private val versionPackage: String) {
+    companion object {
+        fun fromMcVersion(mcVersion: String) = VersionPackage("v" + mcVersion.replace(".", "_"))
+    }
+
     private fun PackageName?.toApiPackageName() = versionPackage.prependToQualified(this ?: PackageName.Empty)
     private fun ShortClassName.toApiShortClassName() =
         ShortClassName(("I" + outerMostClass()).prependTo(innerClasses()))

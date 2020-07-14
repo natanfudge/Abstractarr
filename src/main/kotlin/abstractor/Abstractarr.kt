@@ -1,54 +1,65 @@
 package abstractor
 
-import codegeneration.*
+import codegeneration.ClassAccess
+import codegeneration.ClassVariant
+import codegeneration.Public
+import codegeneration.Visibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
-import metautils.codegeneration.asm.toAsmAccess
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import metautils.api.*
-import metautils.signature.*
+import metautils.codegeneration.asm.toAsmAccess
+import metautils.signature.ClassGenericType
+import metautils.signature.fromNameAndTypeArgs
+import metautils.signature.toClassfileName
+import metautils.signature.toTypeArgumentsOfNames
 import metautils.util.*
-import metautils.util.createDirectory
-import metautils.util.deleteRecursively
-import metautils.util.exists
-import metautils.util.isDirectory
 import java.nio.file.Path
 
-enum class AbstractionType {
+interface IAbstractionType {
+    val isAbstracted: Boolean
+    val addInInterface: Boolean
+    val addInBaseclass: Boolean
+}
+
+enum class MemberAbstractionType : IAbstractionType {
     None,
     Interface,
     Baseclass,
     BaseclassAndInterface;
 
-    val isAbstracted get() = this != None
-    val addInInterface get() = this == Interface || this  == BaseclassAndInterface
-    val addInBaseclass get() = this == Baseclass || this  == BaseclassAndInterface
+    override val isAbstracted get() = this != None
+    override val addInInterface get() = this == Interface || this == BaseclassAndInterface
+    override val addInBaseclass get() = this == Baseclass || this == BaseclassAndInterface
 }
 
-enum class ClassAbstractionType {
+enum class ClassAbstractionType : IAbstractionType {
     None,
     Interface,
     BaseclassAndInterface;
 
-    val isAbstracted get() = this != None
-    val addInInterface get() = this == Interface || this  == BaseclassAndInterface
-    val addInBaseclass get() = this  == BaseclassAndInterface
+    override val isAbstracted get() = this != None
+    override val addInInterface get() = this == Interface || this == BaseclassAndInterface
+    override val addInBaseclass get() = this == BaseclassAndInterface
 }
 
 data class TargetSelector(
     val classes: (ClassApi) -> ClassAbstractionType,
-    val methods: (ClassApi, ClassApi.Method) -> AbstractionType,
-    val fields: (ClassApi, ClassApi.Field) -> AbstractionType
-){
-    companion object{
+    val methods: (ClassApi, ClassApi.Method) -> MemberAbstractionType,
+    val fields: (ClassApi, ClassApi.Field) -> MemberAbstractionType
+) {
+    companion object {
         val All = TargetSelector({
             // Non-static inner class baseclasses are not supported yet
-            if(it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
-        else ClassAbstractionType.BaseclassAndInterface},
-            { _, _ -> AbstractionType.BaseclassAndInterface },
-            { _, _ -> AbstractionType.BaseclassAndInterface }
+            if (it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
+            else ClassAbstractionType.BaseclassAndInterface
+        },
+            { _, _ -> MemberAbstractionType.BaseclassAndInterface },
+            { _, _ -> MemberAbstractionType.BaseclassAndInterface }
         )
     }
 }
@@ -67,6 +78,8 @@ data class AbstractionMetadata(
 )
 /** A list used in testing and production to know what interfaces/classes to attach to minecraft interface */
 typealias AbstractionManifest = Map<String, AbstractedClassInfo>
+
+val AbstractionManifestSerializer = MapSerializer(String.serializer(), AbstractedClassInfo.serializer())
 
 @Serializable
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
@@ -97,15 +110,19 @@ class Abstractor /*private*/ constructor(
             // For other things in ClassEntry we just pass empty list in assumption they won't be needed.
             val additionalEntries = listAllGeneratedClasses(classes, metadata)
 
-            return ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries) {
+
+            return ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries) { index ->
+                val stubClasses = getReferencedClasses(classNamesToClasses.values, metadata.selector)
                 usage(
                     Abstractor(
-                        classes, classNamesToClasses,
-                        stubClasses = getReferencedClasses(classNamesToClasses.values,metadata.selector)
-                        , index = it
+                        classes, classNamesToClasses, stubClasses = stubClasses, index = index
                     )
                 )
-                buildAbstractionManifest(classes, metadata.versionPackage)
+
+                val classesWithApiInterfaces = classNamesToClasses.values.filter {
+                    it.isPublicApi && (metadata.selector.classes(it).isAbstracted || it.name in stubClasses)
+                }
+                buildAbstractionManifest(classesWithApiInterfaces, metadata.versionPackage)
             }
         }
     }
@@ -175,25 +192,23 @@ internal fun getReferencedClasses(
 
 @PublishedApi
 internal fun buildAbstractionManifest(
-    classes: Collection<ClassApi>,
+    classesWithApiInterfaces: Collection<ClassApi>,
     version: VersionPackage
 ): AbstractionManifest = with(version) {
-    classes.flatMap { outerClass ->
-        outerClass.allInnerClassesAndThis().filter { it.isPublicApi }.map { mcClass ->
-            val mcClassName = mcClass.name.toSlashQualifiedString()
-            val apiClass = mcClass.name.toApiClass()
-            val oldSignature = mcClass.getSignature()
-            val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
-                name = apiClass,
-                typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
-            )
+    classesWithApiInterfaces.map { mcClass ->
+        val mcClassName = mcClass.name.toSlashQualifiedString()
+        val apiClass = mcClass.name.toApiClass()
+        val oldSignature = mcClass.getSignature()
+        val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
+            name = apiClass,
+            typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
+        )
 
-            val newSignature = oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
-            mcClassName to AbstractedClassInfo(
-                apiClassName = apiClass.toSlashQualifiedString(),
-                newSignature = newSignature.toClassfileName()
-            )
-        }
+        val newSignature = oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
+        mcClassName to AbstractedClassInfo(
+            apiClassName = apiClass.toSlashQualifiedString(),
+            newSignature = newSignature.toClassfileName()
+        )
     }.toMap()
 }
 

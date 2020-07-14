@@ -94,14 +94,12 @@ class TestAbstraction {
 
         val manifestJson = Json(
             JsonConfiguration(prettyPrint = true)
-        ).stringify(
-            MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
-            manifest
-        )
+        ).stringify(AbstractionManifestSerializer, manifest)
 
         Paths.get("mcmanifest.json").writeString(manifestJson)
 
         verifyClassFiles(implDest, classpath + listOf(mcJar))
+        implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
 
     }
 
