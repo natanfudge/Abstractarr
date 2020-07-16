@@ -1,14 +1,14 @@
 import metautils.asm.readToClassNode
 import metautils.signature.*
-import org.junit.jupiter.api.Test
 import metautils.testing.getResource
+import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 
 @Suppress("UNUSED_VARIABLE")
 class TestSignatureParsing {
     @Test
     fun testSignatures() {
-        val classNode = readToClassNode(getResource("GenericsTest.class"))
+        val classNode = getResource("GenericsTest.class") { readToClassNode(it) }
         val classSignature = ClassSignature.readFrom(classNode.signature, mapOf())
         testClass(classSignature, classNode.signature)
 
