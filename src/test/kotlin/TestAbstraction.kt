@@ -20,10 +20,6 @@ import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import javax.tools.Diagnostic
-import javax.tools.DiagnosticCollector
-import javax.tools.JavaFileObject
-import javax.tools.ToolProvider
 
 
 class TestAbstraction {
@@ -38,10 +34,10 @@ class TestAbstraction {
 
 
             val metadata = AbstractionMetadata(
-                versionPackage = VersionPackage("v1"),
-                classPath = listOf(), fitToPublicApi = false, writeRawAsm = true,
-                selector = TargetSelector.All,
-                javadocs = testJavadocs()
+                    versionPackage = VersionPackage("v1"),
+                    classPath = listOf(), fitToPublicApi = false, writeRawAsm = true,
+                    selector = TargetSelector.All,
+                    javadocs = testJavadocs()
             )
             val manifest = Abstractor.parse(mcJar, metadata) { abstractor ->
                 abstractor.abstract(implDest, metadata)
@@ -50,10 +46,10 @@ class TestAbstraction {
             }
 
             val manifestJson = Json(
-                JsonConfiguration(prettyPrint = true)
+                    JsonConfiguration(prettyPrint = true)
             ).stringify(
-                MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
-                manifest
+                    MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
+                    manifest
             )
 
             verifyClassFiles(implDest, listOf(mcJar))
@@ -73,17 +69,35 @@ class TestAbstraction {
 
     @Test
     @Disabled
-    fun testMc() {
+    fun testAllMc() {
+        testMc(TargetSelector.All, suffix = "All")
+    }
+
+    @Test
+//    @Disabled
+    fun testFilteredMc() {
+        testMc(TargetSelector(
+                classes = {
+                    if (it.name.shortName.toDollarQualifiedString() == "Block") {
+                        ClassAbstractionType.BaseclassAndInterface
+                    } else ClassAbstractionType.None
+                },
+                methods = { _, _ -> MemberAbstractionType.BaseclassAndInterface },
+                fields = { _, _ -> MemberAbstractionType.BaseclassAndInterface }
+        ), suffix = "Filtered")
+    }
+
+    private fun testMc(selector: TargetSelector, suffix: String) {
         getResources("minecraft-1.16.1.jar", "mclibs") { mcJar, libraries ->
-            val implDest = mcJar.parent.resolve("abstractedMcImpl")
-            val apiDest = mcJar.parent.resolve("abstractedMcApi")
-            val srcDest = mcJar.parent.resolve("abstractMcApi-sources")
+            val implDest = mcJar.parent.resolve("abstractedMcImpl$suffix")
+            val apiDest = mcJar.parent.resolve("abstractedMcApi$suffix")
+            val srcDest = mcJar.parent.resolve("abstractMcApi-sources$suffix")
             val classpath = libraries.recursiveChildren().filter { it.hasExtension(".jar") }.toList()
             val metadata = AbstractionMetadata(
-                versionPackage = VersionPackage("v1"),
-                classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
-                selector = TargetSelector.All,
-                javadocs = getResource("yarn-1.16.1+build.5-v2.tiny") { JavaDocs.readTiny(it) }
+                    versionPackage = VersionPackage("v1"),
+                    classPath = classpath, fitToPublicApi = false, writeRawAsm = true,
+                    selector = selector,
+                    javadocs = getResource("yarn-1.16.1+build.5-v2.tiny") { JavaDocs.readTiny(it) }
             )
             val manifest = Abstractor.parse(mcJar, metadata) {
                 it.abstract(implDest, metadata)
@@ -92,7 +106,7 @@ class TestAbstraction {
             }
 
             val manifestJson = Json(
-                JsonConfiguration(prettyPrint = true)
+                    JsonConfiguration(prettyPrint = true)
             ).stringify(AbstractionManifestSerializer, manifest)
 
             Paths.get("mcmanifest.json").writeString(manifestJson)
@@ -107,68 +121,68 @@ class TestAbstraction {
         val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toQualifiedName(dotQualified = false))
         val testField = Documentable.Field(testClass, "publicField")
         val testConstructor = Documentable.Method(
-            testClass, "<init>", MethodDescriptor(
+                testClass, "<init>", MethodDescriptor(
                 listOf(
-                    JvmPrimitiveType.Int,
-                    ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
+                        JvmPrimitiveType.Int,
+                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
                 ),
                 ReturnDescriptor.Void
-            )
+        )
         )
         val testConstructorParam = Documentable.Parameter(testConstructor, 1)
         val testMethod = Documentable.Method(
-            testClass, "publicInt", MethodDescriptor(
+                testClass, "publicInt", MethodDescriptor(
                 listOf(
-                    ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
+                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
                 ),
                 JvmPrimitiveType.Int
-            )
+        )
         )
         val testMethodParam = Documentable.Parameter(testMethod, 0)
 
         val testProtectedMethod = Documentable.Method(
-            testClass, "protectedStaticParam",
-            MethodDescriptor(listOf(JvmPrimitiveType.Int), ReturnDescriptor.Void)
+                testClass, "protectedStaticParam",
+                MethodDescriptor(listOf(JvmPrimitiveType.Int), ReturnDescriptor.Void)
         )
 
         val testProtectedMethodParam = Documentable.Parameter(testProtectedMethod, 0)
 
         val testInnerClass = Documentable.Class(
-            "net/minecraft/TestConcreteClass\$TestInnerClass".toQualifiedName(dotQualified = false)
+                "net/minecraft/TestConcreteClass\$TestInnerClass".toQualifiedName(dotQualified = false)
         )
 
         val testInnerClassConstructor = Documentable.Method(
-            testInnerClass, "<init>", MethodDescriptor(
+                testInnerClass, "<init>", MethodDescriptor(
                 listOf(
-                    JvmPrimitiveType.Int,
-                    ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
+                        JvmPrimitiveType.Int,
+                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
                 ),
                 ReturnDescriptor.Void
-            )
+        )
         )
 
         val testInnerClassConstructorParam1 = Documentable.Parameter(testInnerClassConstructor, 1)
         val testInnerClassConstructorParam2 = Documentable.Parameter(testInnerClassConstructor, 0)
 
         return JavaDocs(
-            classes = mapOf(
-                testClass to "This is a class foo bar",
-                testInnerClass to "This is an inner class baz biz"
-            ),
-            fields = mapOf(testField to "Field of hell that will have getters and setters"),
-            methods = mapOf(
-                testConstructor to "Outer class constructor wow",
-                testMethod to "Outer class method wow",
-                testInnerClassConstructor to "This inner class constructor is constructed by the outer class!",
-                testProtectedMethod to "Protected method only in baseclass!"
-            ),
-            parameters = mapOf(
-                testConstructorParam to "Awesome constructor param of hell",
-                testMethodParam to "Even better method param",
-                testInnerClassConstructorParam1 to "Mojang using it is propaganda",
-                testInnerClassConstructorParam2 to "No one uses inner classes lul",
-                testProtectedMethodParam to "Secret param of protected"
-            )
+                classes = mapOf(
+                        testClass to "This is a class foo bar",
+                        testInnerClass to "This is an inner class baz biz"
+                ),
+                fields = mapOf(testField to "Field of hell that will have getters and setters"),
+                methods = mapOf(
+                        testConstructor to "Outer class constructor wow",
+                        testMethod to "Outer class method wow",
+                        testInnerClassConstructor to "This inner class constructor is constructed by the outer class!",
+                        testProtectedMethod to "Protected method only in baseclass!"
+                ),
+                parameters = mapOf(
+                        testConstructorParam to "Awesome constructor param of hell",
+                        testMethodParam to "Even better method param",
+                        testInnerClassConstructorParam1 to "Mojang using it is propaganda",
+                        testInnerClassConstructorParam2 to "No one uses inner classes lul",
+                        testProtectedMethodParam to "Secret param of protected"
+                )
         )
     }
 

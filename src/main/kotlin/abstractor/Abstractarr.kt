@@ -85,12 +85,13 @@ val AbstractionManifestSerializer = MapSerializer(String.serializer(), Abstracte
 data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Boolean,*/ val newSignature: String)
 
 class Abstractor /*private*/ constructor(
-    private val classes: Collection<ClassApi>,
+//    private val classes: Collection<ClassApi>,
+    // This includes the minimal classes
+    private val abstractedClasses : Set<ClassApi>,
     private val classNamesToClasses: Map<QualifiedName, ClassApi>,
 //    private val classRanks: Map<QualifiedName, Int>,
-    private val index: ClasspathIndex,
-    // Classes that won't be abstracted, but will have a stub api interface so they can be referenced from elsewhere
-    private val stubClasses: Set<QualifiedName>
+    private val index: ClasspathIndex
+
 ) {
 
     companion object {
@@ -112,17 +113,28 @@ class Abstractor /*private*/ constructor(
 
 
             return ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries) { index ->
-                val stubClasses = getReferencedClasses(classNamesToClasses.values, metadata.selector)
+                val referencedClasses = getReferencedClasses(classNamesToClasses.values, metadata.selector)
+                // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
+                val allReferencedClasses = referencedClasses.flatMap { it.thisToOuterClasses() }.toSet()
+                val abstractedClasses = classNamesToClasses.values.filter {                // Minimal classes are classes not chosen to be abstracted, but are
+                    // This also adds "minimal" classes:
+                    // Minimal classes are classes not chosen to be abstracted, but are referenced by classes that are.
+                    // Those classes are abstracted, but only contain methods that have abstracted classes in their
+                    // signature. This is done to maximize the amount of exposed methods while minimizing the amount
+                    // of exposed classes.
+                    it.isPublicApi && (metadata.selector.classes(it).isAbstracted || it.name in allReferencedClasses)
+                }
+
                 usage(
                     Abstractor(
-                        classes, classNamesToClasses, stubClasses = stubClasses, index = index
+                        abstractedClasses = abstractedClasses.toSet(),
+                        classNamesToClasses = classNamesToClasses,
+                        index = index
                     )
                 )
 
-                val classesWithApiInterfaces = classNamesToClasses.values.filter {
-                    it.isPublicApi && (metadata.selector.classes(it).isAbstracted || it.name in stubClasses)
-                }
-                buildAbstractionManifest(classesWithApiInterfaces, metadata.versionPackage)
+
+                buildAbstractionManifest(abstractedClasses, metadata.versionPackage)
             }
         }
     }
@@ -136,10 +148,10 @@ class Abstractor /*private*/ constructor(
 
         runBlocking {
             coroutineScope {
-                for (classApi in classes) {
-                    if (!classApi.isPublicApiAsOutermostMember) continue
+                for (classApi in abstractedClasses.filter { !it.isInnerClass }) {
+//                    if (!classApi.isPublicApiAsOutermostMember) continue
                     launch(Dispatchers.IO) {
-                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, stubClasses)
+                        ClassAbstractor(metadata, index, classApi, classNamesToClasses,abstractedClasses)
                             .abstractClass(destPath = destDir)
                     }
                 }
@@ -157,38 +169,6 @@ internal fun getReferencedClasses(
     return allClasses.filter { selected.classes(it).isAbstracted }
         .flatMap { it.getAllReferencedClasses(selected) }.toSet()
 }
-
-//private data class ClassRank(val name: QualifiedName, val rank: Int?)
-
-// Checks what classes the first class classes reference, then what they reference, then what they reference, etc
-// The first class classes have a rank of 1, what they reference has a rank of 2, and everything rank 2 references
-// that has not been referenced yet has a rank of 3, etc
-// unreferenced classes have a rank of null
-//fun rankClasses(
-//    classes: Map<QualifiedName, ClassApi>,
-//    firstClassClasses: (ClassApi) -> Boolean
-//): Map<QualifiedName, Int> {
-//    var currentRank = 1
-//    val rankedClasses = mutableMapOf<QualifiedName, Int>()
-//
-//    var currentClassesToRank: List<QualifiedName> = classes.filter { firstClassClasses(it.value) }.keys.toList()
-//    do {
-//        currentClassesToRank.forEach { rankedClasses[it] = currentRank }
-//
-//        currentRank++
-//        val nextClassesToRank = currentClassesToRank.flatMap { classes.getValue(it).getAllReferencedClasses() }
-//            .filter { it.isMcClassName() && !rankedClasses.containsKey(it) && classes.getValue(it).isPublicApi }
-//            .map { it }
-//        currentClassesToRank = nextClassesToRank
-//    } while (nextClassesToRank.isNotEmpty())
-//
-//    println("Total classes = ${classes.size}")
-//    println("Included classes = ${rankedClasses.size}")
-//    println("Directly referenced classes = ${rankedClasses.filter { it.value == 2 }.size}")
-//
-//    return rankedClasses
-//}
-
 
 @PublishedApi
 internal fun buildAbstractionManifest(

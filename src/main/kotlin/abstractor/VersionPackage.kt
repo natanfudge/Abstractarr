@@ -6,7 +6,7 @@ import metautils.descriptor.*
 import metautils.signature.*
 import metautils.util.*
 
-class VersionPackage(private val versionPackage: String) {
+class VersionPackage internal constructor(private val versionPackage: String) {
     companion object {
         fun fromMcVersion(mcVersion: String) = VersionPackage("v" + mcVersion.replace(".", "_"))
     }

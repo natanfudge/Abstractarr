@@ -5,8 +5,8 @@ import metautils.util.*
 import kotlin.system.measureTimeMillis
 
 fun main() {
-    val time = measureTimeMillis {
-        TestAbstraction().testMc()
-    }
-    println("Millis = $time")
+//    val time = measureTimeMillis {
+//        TestAbstraction().testMc()
+//    }
+//    println("Millis = $time")
 }
