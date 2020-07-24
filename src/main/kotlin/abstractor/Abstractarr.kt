@@ -19,6 +19,7 @@ import metautils.signature.toClassfileName
 import metautils.signature.toTypeArgumentsOfNames
 import metautils.util.*
 import java.nio.file.Path
+import java.nio.file.Paths
 
 interface IAbstractionType {
     val isAbstracted: Boolean
@@ -49,8 +50,8 @@ enum class ClassAbstractionType : IAbstractionType {
 
 data class TargetSelector(
     val classes: (ClassApi) -> ClassAbstractionType,
-    val methods: (ClassApi, ClassApi.Method) -> MemberAbstractionType,
-    val fields: (ClassApi, ClassApi.Field) -> MemberAbstractionType
+    val methods: (ClassApi.Method) -> MemberAbstractionType,
+    val fields: (ClassApi.Field) -> MemberAbstractionType
 ) {
     companion object {
         val All = TargetSelector({
@@ -58,8 +59,8 @@ data class TargetSelector(
             if (it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
             else ClassAbstractionType.BaseclassAndInterface
         },
-            { _, _ -> MemberAbstractionType.BaseclassAndInterface },
-            { _, _ -> MemberAbstractionType.BaseclassAndInterface }
+            {  MemberAbstractionType.BaseclassAndInterface },
+            { MemberAbstractionType.BaseclassAndInterface }
         )
     }
 }
@@ -87,7 +88,7 @@ data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Bool
 class Abstractor /*private*/ constructor(
 //    private val classes: Collection<ClassApi>,
     // This includes the minimal classes
-    private val abstractedClasses : Set<ClassApi>,
+    private val abstractedClasses: Set<ClassApi>,
     private val classNamesToClasses: Map<QualifiedName, ClassApi>,
 //    private val classRanks: Map<QualifiedName, Int>,
     private val index: ClasspathIndex
@@ -103,6 +104,10 @@ class Abstractor /*private*/ constructor(
             val classes = ClassApi.readFromJar(mcJar) { path ->
                 path.toString().let { it.startsWith("/net/minecraft/") || it.startsWith("/com/mojang/blaze3d") }
             }
+
+//            val str = classes.first().testGraphString()
+//            println(classes.first().testGraphString())
+
             val classNamesToClasses = classes.flatMap { outerClass ->
                 outerClass.allInnerClassesAndThis().map { it.name to it }
             }.toMap()
@@ -113,17 +118,28 @@ class Abstractor /*private*/ constructor(
 
 
             return ClasspathIndex.index(metadata.classPath + listOf(mcJar), additionalEntries) { index ->
-                val referencedClasses = getReferencedClasses(classNamesToClasses.values, metadata.selector)
-                // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
-                val allReferencedClasses = referencedClasses.flatMap { it.thisToOuterClasses() }.toSet()
-                val abstractedClasses = classNamesToClasses.values.filter {                // Minimal classes are classes not chosen to be abstracted, but are
-                    // This also adds "minimal" classes:
-                    // Minimal classes are classes not chosen to be abstracted, but are referenced by classes that are.
-                    // Those classes are abstracted, but only contain methods that have abstracted classes in their
-                    // signature. This is done to maximize the amount of exposed methods while minimizing the amount
-                    // of exposed classes.
-                    it.isPublicApi && (metadata.selector.classes(it).isAbstracted || it.name in allReferencedClasses)
-                }
+//                val referencedClasses = getReferencedClasses(classNamesToClasses.values, metadata.selector)
+//                // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
+//                val allReferencedClasses = referencedClasses.flatMap { it.thisToOuterClasses() }.toSet()
+//                val abstractedClasses = classNamesToClasses.values
+//                    .filter {                // Minimal classes are classes not chosen to be abstracted, but are
+//                        // This also adds "minimal" classes:
+//                        // Minimal classes are classes not chosen to be abstracted, but are referenced by classes that are.
+//                        // Those classes are abstracted, but only contain methods that have abstracted classes in their
+//                        // signature. This is done to maximize the amount of exposed methods while minimizing the amount
+//                        // of exposed classes.
+//                        it.isPublicApi && (metadata.selector.classes(it).isAbstracted || it.name in allReferencedClasses)
+//                    }
+//
+//                val str = abstractedClasses/*.take(10)*/.toGraphvizString(firstRowClasses = classNamesToClasses.values.filter {
+//                    metadata.selector.classes(it).isAbstracted
+//                })
+//
+//                Paths.get("test.txt").writeString(str)
+//                println()
+
+
+                val abstractedClasses = classNamesToClasses.values.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
 
                 usage(
                     Abstractor(
@@ -151,7 +167,7 @@ class Abstractor /*private*/ constructor(
                 for (classApi in abstractedClasses.filter { !it.isInnerClass }) {
 //                    if (!classApi.isPublicApiAsOutermostMember) continue
                     launch(Dispatchers.IO) {
-                        ClassAbstractor(metadata, index, classApi, classNamesToClasses,abstractedClasses)
+                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, abstractedClasses)
                             .abstractClass(destPath = destDir)
                     }
                 }

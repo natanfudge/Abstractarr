@@ -605,7 +605,8 @@ class TestBaseClasses {
 
         object : BaseTestProtected() {
             init {
-                assertEquals(constant,"constant")
+//                assertEquals(constant,"constant")
+                assertEquals(getConstant(),"constant")
                 assertEquals(getStaticField(),"static")
                 setStaticField("bar")
                 assertEquals(getStaticField(),"bar")
@@ -645,7 +646,8 @@ class TestBaseClasses {
 
         object : BaseTestProtectedSub(){
             init {
-                assertEquals(constant,"constant")
+//                assertEquals(constant,"constant")
+                assertEquals(getConstant(),"constant")
                 assertEquals(getStaticField(),"static")
                 setStaticField("bar")
                 assertEquals(getStaticField(),"bar")

@@ -33,7 +33,7 @@ internal data class ClassAbstractor(
     private fun apiClassName(outerClass: GeneratedClass?, nameMap: (QualifiedName) -> QualifiedName) =
         if (outerClass == null) nameMap(classApi.name) else classApi.name
 
-    private fun JavaClassType.isAvailableAsAbstractedApi(): Boolean {
+    private fun JavaClassType.isAccessibleAsAbstractedApi(): Boolean {
         if (!isMcClass()) return true
         val classApi = mcClasses.getValue(type.toJvmQualifiedName())
         return classApi.isPublicApiAsOutermostMember && classApi in abstractedClasses
@@ -41,7 +41,7 @@ internal data class ClassAbstractor(
 
     // Sometimes mc stupidly inherits non-public classes in public classes so we need to filter them out
     private fun superInterfacesAccessibleAsAbstractedApi() =
-        classApi.superInterfaces.filter { it.isAvailableAsAbstractedApi() }
+        classApi.superInterfaces.filter { it.isAccessibleAsAbstractedApi() }
 
     private fun createBaseclass(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         if (!metadata.selector.classes(classApi).addInBaseclass) return@with
@@ -112,7 +112,7 @@ internal data class ClassAbstractor(
 
         // If it's not a mc class then we add an asSuper() method
         val superClass = classApi.superClass?.let {
-            if (it.isMcClass() && it.isAvailableAsAbstractedApi()) it.remapToApiClass() else null
+            if (it.isMcClass() && it.isAccessibleAsAbstractedApi()) it.remapToApiClass() else null
         }
 
         val interfaces = superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass)
@@ -159,7 +159,7 @@ internal data class ClassAbstractor(
         classApi.isPublicApi && classApi in abstractedClasses
     }
 
-    private fun ClassApi.Method.isAccessibleAsAbstractedApi() = getAllReferencedClassesRecursively().all {
+    private fun ClassApi.Method.isAccessibleAsAbstractedApi() = getContainedNamesRecursively().all {
         val classApi = mcClasses[it] ?: return@all true
         classApi.isPublicApi && classApi in abstractedClasses
     }
@@ -171,11 +171,11 @@ internal data class ClassAbstractor(
     )
 
     private fun methodsAddedInBaseclass(allMethods: List<ClassApi.Method>): BaseclassMethodsAddedInfo {
-        val distinctMethods = allMethods.distinctBy { it.uniqueIdentifier() }
+        val distinctMethods = allMethods.distinctBy { it.locallyUniqueIdentifier }
         val relevantMethods = distinctMethods.filter {
             // Constructors are handled separately
             !it.isConstructor && it.isAccessibleAsAbstractedApi()
-                    && metadata.selector.methods(classApi, it).addInBaseclass
+                    && metadata.selector.methods(it).addInBaseclass
         }
 
         val bridgeMethods = relevantMethods.filter { method ->
@@ -193,7 +193,7 @@ internal data class ClassAbstractor(
         val apiMethods = distinctMethods.filter { method ->
             // Constructors are handled separately
             if (method.isConstructor || !method.isAccessibleAsAbstractedApi()
-                || !metadata.selector.methods(classApi, method).addInBaseclass
+                || !metadata.selector.methods(method).addInBaseclass
             ) return@filter false
             val containsMc = method.descriptorContainsMcClasses()
 
@@ -243,10 +243,10 @@ internal data class ClassAbstractor(
         val existingMethods = (apiMethods + bridgeMethods +
                 // We don't want to override final methods accidentally with a getter/setter
                 allMethods.filter { it.isFinal })
-            .distinctBy { it.uniqueIdentifier() }
+            .distinctBy { it.locallyUniqueIdentifier }
         for (field in classApi.fields) {
             if (field.isProtected && field.isAccessibleAsAbstractedApi()
-                && metadata.selector.fields(classApi, field).addInBaseclass
+                && metadata.selector.fields(field).addInBaseclass
             ) {
                 abstractField(field, castSelf = false, existingMethods = existingMethods)
             }
@@ -276,7 +276,7 @@ internal data class ClassAbstractor(
     private fun methodsAddedInApiInterface(): ApiInterfaceMethodsAddedInfo {
         val relevantMethods = classApi.methods.filter {
             it.isPublic && it.isAccessibleAsAbstractedApi()
-                    && metadata.selector.methods(classApi, it).addInInterface
+                    && metadata.selector.methods(it).addInInterface
         }
 
         val factories = relevantMethods.filter { it.isConstructor }
@@ -304,7 +304,7 @@ internal data class ClassAbstractor(
 
         for (field in classApi.fields) {
             if (field.isPublic && field.isAccessibleAsAbstractedApi()
-                && metadata.selector.fields(classApi, field).addInInterface
+                && metadata.selector.fields(field).addInInterface
             ) {
                 abstractField(field, castSelf = true, existingMethods = apiMethods)
             }
@@ -522,11 +522,11 @@ internal data class ClassAbstractor(
         castSelf: Boolean,
         existingMethods: List<ClassApi.Method>
     ) {
-        if (field.isFinal && field.isStatic) {
-            addConstant(field)
-        } else {
+//        if (field.isFinal && field.isStatic) {
+//            addConstant(field)
+//        } else {
             addGetter(field, castSelf, existingMethods)
-        }
+//        }
 
         if (!field.isFinal) {
             addSetter(field, castSelf, existingMethods)
@@ -919,11 +919,29 @@ internal data class ClassAbstractor(
     private fun AnyJavaType.isAssignableTo(otherType: AnyJavaType) = toJvmType().isAssignableTo(otherType.toJvmType())
 }
 
+//// soft to do: not sure what to do when a generic class uses type arguments that were not abstracted
+//internal fun VersionPackage.allApiInterfaceTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration>{
+//    val arguments = allUnmappedApiInterfaceTypeArguments(classApi)
+//    return arguments.
+//}
+//
+////private fun TypeArgumentDeclaration.filterOutBoundsNotAccessibleFromAbstractedApi()
+////= when {
+////    classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
+////    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
+////}
+
 // soft to do: not sure what to do when a generic class uses type arguments that were not abstracted
 internal fun VersionPackage.allApiInterfaceTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
     classApi.isStatic -> classApi.typeArguments.remapDeclToApiClasses()
     else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapDeclToApiClasses() }
 }
+
+//// soft to do: not sure what to do when a generic class uses type arguments that were not abstracted
+//internal fun VersionPackage.allUnmappedApiInterfaceTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
+//    classApi.isStatic -> classApi.typeArguments
+//    else -> classApi.outerClassesToThis().flatMap { it.typeArguments}
+//}
 
 private const val ConflictingTypeVariableSuffix = "_OVERRIDE"
 private const val factoryMethodName = "create"

@@ -4,7 +4,8 @@ import java.util.List;
 
 public class TestOverrideReturnTypeChangeSuper {
     public Object foo() {
-        return null;
+
+        return new Object();
     }
 
     public List<TestOtherClass> bar() {

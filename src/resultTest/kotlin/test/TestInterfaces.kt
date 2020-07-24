@@ -163,7 +163,7 @@ fun ITestOverrideReturnTypeChange.testOverrideReturnTypeChangeCalls() {
 
 fun ITestOverrideReturnTypeChangeSuper.testOverrideReturnTypeChangeSuperCalls() {
     val x: Any? = foo()
-    assertEquals(x, null)
+    assert(x is Any)
     val y: List<ITestOtherClass>? = bar()
     assertEquals(y, null)
     val z: ITestAbstractClass? = mcClass()
@@ -218,17 +218,22 @@ class TestInterfaces {
     @Test
     fun testConcreteClass() {
 
-        ITestConcreteClass.publicStaticOtherClassField
-        assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
+//        ITestConcreteClass.publicStaticOtherClassField
+//        assertEquals(ITestConcreteClass.publicStaticFinalField, "BAR")
+                ITestConcreteClass.getPublicStaticOtherClassField()
+        assertEquals(ITestConcreteClass.getPublicStaticFinalField(), "BAR")
         assertEquals(ITestConcreteClass.publicStatic(), 4)
         assert(ITestConcreteClass.create(1, ITestOtherClass.create()) is ITestConcreteClass)
         assertEquals(ITestConcreteClass.getPublicStaticField(), null)
         ITestConcreteClass.setPublicStaticField("foo")
         assertEquals(ITestConcreteClass.getPublicStaticField(), "foo")
-        assertEquals(ITestConcreteClass.TestInnerClass.publicStaticFinalField, "BAR")
-        assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStaticFinalField, "BAR")
+//        assertEquals(ITestConcreteClass.TestInnerClass.publicStaticFinalField, "BAR")
+//        assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStaticFinalField, "BAR")
+        assertEquals(ITestConcreteClass.TestInnerClass.getPublicStaticFinalField(), "BAR")
+        assertEquals(ITestConcreteClass.TestStaticInnerClass.getPublicStaticFinalField(), "BAR")
 
-        assert(ITestConcreteClass.TestStaticInnerClass.publicStaticOtherClassField is ITestOtherClass?)
+//        assert(ITestConcreteClass.TestStaticInnerClass.publicStaticOtherClassField is ITestOtherClass?)
+        assert(ITestConcreteClass.TestStaticInnerClass.getPublicStaticOtherClassField() is ITestOtherClass?)
         assertEquals(ITestConcreteClass.TestStaticInnerClass.publicStatic(), 4)
 
         with(ITestConcreteClass.create(0, ITestOtherClass.create())) {
@@ -247,26 +252,32 @@ class TestInterfaces {
 
     @Test
     fun testEnum() {
-        assertEquals(ITestEnum.foo(), ITestEnum.THING2)
-        with(ITestEnum.THING) {
+//        assertEquals(ITestEnum.foo(), ITestEnum.THING2)
+        assertEquals(ITestEnum.foo(), ITestEnum.getTHING2())
+//        with(ITestEnum.THING) {
+        with(ITestEnum.getTHING()) {
             assertEquals(bar(), null)
             assertEquals(x, 1)
             x = 3
             assertEquals(x, 3)
         }
 
-        with(ITestEnum.THING2 as Enum<*>) {
+//        with(ITestEnum.THING2 as Enum<*>) {
+        with(ITestEnum.getTHING2() as Enum<*>) {
             assertEquals(name, "THING2")
             assertEquals(ordinal, 1)
         }
 
         with(ITestEnum.values()) {
             assertEquals(size, 2)
-            assertEquals(this[0], ITestEnum.THING)
-            assertEquals(this[1], ITestEnum.THING2)
+//            assertEquals(this[0], ITestEnum.THING)
+//            assertEquals(this[1], ITestEnum.THING2)
+            assertEquals(this[0], ITestEnum.getTHING())
+            assertEquals(this[1], ITestEnum.getTHING2())
         }
 
-        assertEquals(ITestEnum.valueOf("THING"), ITestEnum.THING)
+//        assertEquals(ITestEnum.valueOf("THING"), ITestEnum.THING)
+        assertEquals(ITestEnum.valueOf("THING"), ITestEnum.getTHING())
     }
 
     @Test
@@ -274,7 +285,8 @@ class TestInterfaces {
         assertEquals(ITestFinalClass.getPublicStaticField(), null)
         ITestFinalClass.setPublicStaticField("bar")
         assertEquals(ITestFinalClass.getPublicStaticField(), "bar")
-        assert(ITestFinalClass.publicStaticOtherClassField is ITestOtherClass)
+//        assert(ITestFinalClass.publicStaticOtherClassField is ITestOtherClass)
+        assert(ITestFinalClass.getPublicStaticOtherClassField() is ITestOtherClass)
         with(ITestFinalClass.create(ITestOtherClass.create())) {
             assertEquals(inheritedMethod(), 2)
             assertEquals(overridenMethod(), 3)
@@ -323,7 +335,8 @@ class TestInterfaces {
 
     @Test
     fun testInterface() {
-        assertEquals(ITestInterface.x, 2)
+//        assertEquals(ITestInterface.x, 2)
+        assertEquals(ITestInterface.getX(), 2)
     }
 
     @Test

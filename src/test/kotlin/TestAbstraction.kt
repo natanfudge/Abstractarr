@@ -68,7 +68,7 @@ class TestAbstraction {
 
 
     @Test
-    @Disabled
+//    @Disabled
     fun testAllMc() {
         testMc(TargetSelector.All, suffix = "All")
     }
@@ -82,8 +82,8 @@ class TestAbstraction {
                         ClassAbstractionType.BaseclassAndInterface
                     } else ClassAbstractionType.None
                 },
-                methods = { _, _ -> MemberAbstractionType.BaseclassAndInterface },
-                fields = { _, _ -> MemberAbstractionType.BaseclassAndInterface }
+                methods = {  MemberAbstractionType.BaseclassAndInterface },
+                fields = {  MemberAbstractionType.BaseclassAndInterface }
         ), suffix = "Filtered")
     }
 
@@ -109,7 +109,7 @@ class TestAbstraction {
                     JsonConfiguration(prettyPrint = true)
             ).stringify(AbstractionManifestSerializer, manifest)
 
-            Paths.get("mcmanifest.json").writeString(manifestJson)
+//            Paths.get("mcmanifest.json").writeString(manifestJson)
 
             verifyClassFiles(implDest, classpath + listOf(mcJar))
             implDest.recursiveChildren().forEach { if (it.isClassfile()) printAsmCode(it) }
