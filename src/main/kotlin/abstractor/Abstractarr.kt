@@ -88,7 +88,7 @@ data class AbstractedClassInfo(val apiClassName: String, /*val isThrowable: Bool
 class Abstractor /*private*/ constructor(
 //    private val classes: Collection<ClassApi>,
     // This includes the minimal classes
-    private val abstractedClasses: Set<ClassApi>,
+    private val abstractedClasses: Collection<ClassApi>,
     private val classNamesToClasses: Map<QualifiedName, ClassApi>,
 //    private val classRanks: Map<QualifiedName, Int>,
     private val index: ClasspathIndex
@@ -140,10 +140,12 @@ class Abstractor /*private*/ constructor(
 
 
                 val abstractedClasses = classNamesToClasses.values.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
+                    // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
+                    .flatMap { it.outerClassesToThis() }
 
                 usage(
                     Abstractor(
-                        abstractedClasses = abstractedClasses.toSet(),
+                        abstractedClasses = abstractedClasses,
                         classNamesToClasses = classNamesToClasses,
                         index = index
                     )
@@ -167,7 +169,7 @@ class Abstractor /*private*/ constructor(
                 for (classApi in abstractedClasses.filter { !it.isInnerClass }) {
 //                    if (!classApi.isPublicApiAsOutermostMember) continue
                     launch(Dispatchers.IO) {
-                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, abstractedClasses)
+                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, abstractedClasses.map { it.name }.toSet())
                             .abstractClass(destPath = destDir)
                     }
                 }

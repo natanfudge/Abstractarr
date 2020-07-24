@@ -19,7 +19,7 @@ internal data class ClassAbstractor(
     private val classApi: ClassApi,
     private val mcClasses: Map<QualifiedName, ClassApi>,
 //    private val stubClasses: Set<QualifiedName>,
-    private val abstractedClasses: Set<ClassApi>
+    private val abstractedClasses: Set<QualifiedName>
 ) {
     fun abstractClass(destPath: Path) {
         check(!classApi.isInnerClass)
@@ -36,7 +36,7 @@ internal data class ClassAbstractor(
     private fun JavaClassType.isAccessibleAsAbstractedApi(): Boolean {
         if (!isMcClass()) return true
         val classApi = mcClasses.getValue(type.toJvmQualifiedName())
-        return classApi.isPublicApiAsOutermostMember && classApi in abstractedClasses
+        return classApi.isPublicApiAsOutermostMember && classApi.name in abstractedClasses
     }
 
     // Sometimes mc stupidly inherits non-public classes in public classes so we need to filter them out
@@ -156,12 +156,12 @@ internal data class ClassAbstractor(
 
     private fun ClassApi.Field.isAccessibleAsAbstractedApi() = type.getContainedNamesRecursively().all {
         val classApi = mcClasses[it] ?: return@all true
-        classApi.isPublicApi && classApi in abstractedClasses
+        classApi.isPublicApi && classApi.name in abstractedClasses
     }
 
     private fun ClassApi.Method.isAccessibleAsAbstractedApi() = getContainedNamesRecursively().all {
         val classApi = mcClasses[it] ?: return@all true
-        classApi.isPublicApi && classApi in abstractedClasses
+        classApi.isPublicApi && classApi.name in abstractedClasses
     }
 
 
@@ -324,7 +324,7 @@ internal data class ClassAbstractor(
     private fun GeneratedClass.addBareBonesBody() {
         getJavadoc(classApi.documentable())?.let { addJavadoc(it) }
         for (innerClass in classApi.innerClasses) {
-            if (innerClass in abstractedClasses) {
+            if (innerClass.name in abstractedClasses) {
                 copy(classApi = innerClass).createApiInterface(outerClass = this, destPath = null)
             }
         }

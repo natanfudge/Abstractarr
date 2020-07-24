@@ -78,7 +78,7 @@ class TestAbstraction {
     fun testFilteredMc() {
         testMc(TargetSelector(
                 classes = {
-                    if (it.name.shortName.toDollarQualifiedString() == "Block") {
+                    if (it.name.shortName.toDollarQualifiedString() in setOf("Block",/*"AbstractBlock",*/"Material", "AbstractBlock\$Settings")) {
                         ClassAbstractionType.BaseclassAndInterface
                     } else ClassAbstractionType.None
                 },
