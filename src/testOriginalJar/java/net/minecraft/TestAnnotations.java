@@ -30,6 +30,10 @@ public class TestAnnotations extends TestAbstractClass {
 
     }
 
+    public static void apiAnoParam(@Nullable TestOtherClass foo){
+
+    }
+
     @Nullable
     public String nullable() {
         return "Asdf";

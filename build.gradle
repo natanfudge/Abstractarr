@@ -85,6 +85,7 @@ dependencies {
 //    implementation('org.jetbrains:intellij-fernflower:1.2.0.15')
     implementation "net.fabricmc:tiny-mappings-parser:0.3.0+build.17"
 
+    testOriginalJarCompileOnly "org.jetbrains:annotations:19.0.0"
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.3.72'
     testRuntime('org.junit.jupiter:junit-jupiter-engine:5.4.2')
     resultTestImplementation 'org.jetbrains.kotlin:kotlin-test-junit5:1.3.72'
@@ -141,7 +142,8 @@ bintray {
     publications = ["mavenJava"]
     publish = true //[Default: false] Whether version should be auto published after an upload
     pkg {
-        repo = "libs"
+        repo = "maven"
+        userOrg = "febb"
         name = "Abstractor"
         licenses = ["mit"]
         version {

@@ -1,9 +1,9 @@
 package abstractor
 
-import codegeneration.ClassAccess
-import codegeneration.ClassVariant
+import metautils.codegeneration.ClassAccess
+import metautils.codegeneration.ClassVariant
 import codegeneration.Public
-import codegeneration.Visibility
+import metautils.codegeneration.Visibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -19,7 +19,6 @@ import metautils.signature.toClassfileName
 import metautils.signature.toTypeArgumentsOfNames
 import metautils.util.*
 import java.nio.file.Path
-import java.nio.file.Paths
 
 interface IAbstractionType {
     val isAbstracted: Boolean

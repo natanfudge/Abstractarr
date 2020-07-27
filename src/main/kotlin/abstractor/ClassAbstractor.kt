@@ -188,6 +188,8 @@ internal data class ClassAbstractor(
         // Baseclasses don't inherit the baseclasses of their superclasses, so we need to also add all the methods
         // of the superclasses
         val apiMethods = distinctMethods.filter { method ->
+            //TODO: code here seems weird,  why not just use relevantMethods?
+
             // Constructors are handled separately
             if (method.isConstructor || !method.isAccessibleAsAbstractedApi()
                     || !metadata.selector.methods(method).addInBaseclass
@@ -237,7 +239,9 @@ internal data class ClassAbstractor(
             addApiDeclaredMethod(method, callSuper = true, forceBody = false, finalIsAllowed = true)
         }
 
-        val existingMethods = (apiMethods + bridgeMethods +
+        //TODO: need to make sure we test against existing methods when the max possible is added i.e.
+        //
+        val existingMethods = (allMethods +
                 // We don't want to override final methods accidentally with a getter/setter
                 allMethods.filter { it.isFinal })
                 .distinctBy { it.locallyUniqueIdentifier }
@@ -946,5 +950,4 @@ private const val factoryMethodName = "create"
 private const val BooleanGetterPrefix = "is"
 private const val ArrayFactoryName = "array"
 private const val ArrayFactorySizeParamName = "size"
-private val NotNullAnnotation =
-        JavaAnnotation(ObjectType("org/jetbrains/annotations/NotNull", dotQualified = false), parameters = mapOf())
+private val NotNullAnnotation = JavaAnnotation.fromRawJvmClassName("org/jetbrains/annotations/NotNull")
