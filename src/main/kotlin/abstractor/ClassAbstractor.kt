@@ -1,13 +1,15 @@
 package abstractor
 
-import codegeneration.*
+import codegeneration.Public
 import metautils.api.*
 import metautils.codegeneration.*
 import metautils.codegeneration.asm.AsmCodeGenerator
-import metautils.descriptor.*
+import metautils.descriptor.JvmPrimitiveType
+import metautils.descriptor.JvmType
+import metautils.descriptor.ReturnDescriptor
+import metautils.descriptor.remap
 import metautils.signature.*
 import metautils.util.*
-import sun.plugin.com.JavaClass
 import java.nio.file.Path
 
 
@@ -50,7 +52,7 @@ internal data class ClassAbstractor(
 
         val interfaces = listOf(
                 mcClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
-        )
+        ) + metadata.interfacesbase.map { ClassGenericType.fromRawClassString(it).noAnnotations() }
                 // With interfaces, baseclasses need to have the mc class as their super INTERFACE and not the super CLASS
                 // Obv mc classes are not exposed to the user
                 .applyIf(classApi.isInterface && !metadata.fitToPublicApi) { it + mcClass }
@@ -113,12 +115,7 @@ internal data class ClassAbstractor(
             if (it.isMcClass() && it.isAccessibleAsAbstractedApi()) it.remapToApiClass() else null
         }
 
-        val interfaces = ArrayList<JavaClassType>()
-        interfaces.addAll(superInterfacesAccessibleAsAbstractedApi().remapToApiClasses())
-        if(superClass != null) {
-            interfaces.add(superClass)
-        }
-        interfaces.addAll(metadata.interfaces)
+        val interfaces = superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass) + metadata.iinterfaces.map { ClassGenericType.fromRawClassString(it).noAnnotations() }
 
         val classInfo = ClassInfo(
                 visibility = Visibility.Public,
