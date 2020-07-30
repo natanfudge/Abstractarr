@@ -65,6 +65,7 @@ data class TargetSelector(
 }
 
 data class AbstractionMetadata(
+    val interfaces: List<JavaClassType>,
     // A string prefix for api packages
     val versionPackage: VersionPackage,
     // Libraries used in the abstracted jar

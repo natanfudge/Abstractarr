@@ -7,6 +7,7 @@ import metautils.codegeneration.asm.AsmCodeGenerator
 import metautils.descriptor.*
 import metautils.signature.*
 import metautils.util.*
+import sun.plugin.com.JavaClass
 import java.nio.file.Path
 
 
@@ -112,7 +113,12 @@ internal data class ClassAbstractor(
             if (it.isMcClass() && it.isAccessibleAsAbstractedApi()) it.remapToApiClass() else null
         }
 
-        val interfaces = superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass)
+        val interfaces = ArrayList<JavaClassType>()
+        interfaces.addAll(superInterfacesAccessibleAsAbstractedApi().remapToApiClasses())
+        if(superClass != null) {
+            interfaces.add(superClass)
+        }
+        interfaces.addAll(metadata.interfaces)
 
         val classInfo = ClassInfo(
                 visibility = Visibility.Public,
