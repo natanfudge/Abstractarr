@@ -32,18 +32,18 @@ class TestSignatureParsing {
         val backToClass = ClassSignature.readFrom(asString, mapOf())
         val asStringAgain = backToClass.toClassfileName()
 
-        assertEquals(classSignature, backToClass)
+        assertEquals(classSignature.toString(), backToClass.toString())
         assertEquals(signature, asString)
         assertEquals(asString, asStringAgain)
     }
-
+//expected: metautils.signature.ClassSignature@a11e3696<<T extends GenericsTest$InnerClass implements Comparable<String>, List<T>, U extends T> (extends Object)> but was: metautils.signature.ClassSignature@146a42b1<<T extends GenericsTest$InnerClass implements Comparable<String>, List<T>, U extends T> (extends Object)>
 
     private fun testMethod(methodSignature: MethodSignature, signature: String, args: TypeArgDecls) {
         val asString = methodSignature.toClassfileName()
-        val backToClass = MethodSignature.readFrom(asString, args)
-        val asStringAgain = backToClass.toClassfileName()
+        val backToMethod = MethodSignature.readFrom(asString, args)
+        val asStringAgain = backToMethod.toClassfileName()
 
-        assertEquals(methodSignature, backToClass)
+        assertEquals(methodSignature.toString(), backToMethod.toString())
         assertEquals(signature, asString)
         assertEquals(asString, asStringAgain)
     }

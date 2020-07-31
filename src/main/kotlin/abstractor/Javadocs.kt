@@ -1,7 +1,6 @@
 package abstractor
 
 import metautils.types.jvm.MethodDescriptor
-import metautils.types.jvm.fromDescriptorString
 import metautils.util.QualifiedName
 import metautils.util.flatMapNotNull
 import metautils.util.toQualifiedName
