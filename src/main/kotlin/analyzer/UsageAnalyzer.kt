@@ -2,9 +2,8 @@ package analyzer
 
 import metautils.api.JavaAnnotation
 import metautils.asm.readToClassNode
-import metautils.descriptor.FieldDescriptor
-import metautils.descriptor.MethodDescriptor
-import metautils.descriptor.read
+import metautils.types.jvm.FieldDescriptor
+import metautils.types.jvm.MethodDescriptor
 import metautils.signature.*
 import metautils.util.*
 import org.objectweb.asm.tree.*
@@ -86,7 +85,7 @@ private fun fieldSignatureUsages(signature: String?) =
         signatureUsages(signature) { FieldSignature.readFrom(it, null) }
 
 private fun fieldDescriptorUsages(descriptor: String) =
-    FieldDescriptor.read(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
+    FieldDescriptor.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
 
 private fun MethodNode.usages(): List<Usage> {
     val annotationUsages = annotationUsages(
@@ -108,7 +107,7 @@ private fun MethodNode.usages(): List<Usage> {
 }
 
 private fun methodDescriptorUsages(descriptor: String) =
-        MethodDescriptor.read(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
+        MethodDescriptor.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
 
 private fun methodSignatureUsages(signature: String?) =
         signatureUsages(signature) { MethodSignature.readFrom(it, null) }
@@ -126,7 +125,7 @@ private fun AbstractInsnNode.usages(): List<Usage> {
             methodDescriptorUsages(desc) + Usage.Method(
                 className = owner.toSlashQualifiedName(),
                 name = name,
-                descriptor = MethodDescriptor.read(desc)
+                descriptor = MethodDescriptor.fromDescriptorString(desc)
             )
         }
         is TypeInsnNode -> {

@@ -2,8 +2,8 @@ package abstractor
 
 import metautils.api.JavaType
 import metautils.api.remap
-import metautils.descriptor.*
 import metautils.signature.*
+import metautils.types.jvm.*
 import metautils.util.*
 
 class VersionPackage internal constructor(private val versionPackage: String) {

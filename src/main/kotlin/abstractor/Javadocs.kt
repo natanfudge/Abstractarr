@@ -1,7 +1,7 @@
 package abstractor
 
-import metautils.descriptor.MethodDescriptor
-import metautils.descriptor.read
+import metautils.types.jvm.MethodDescriptor
+import metautils.types.jvm.fromDescriptorString
 import metautils.util.QualifiedName
 import metautils.util.flatMapNotNull
 import metautils.util.toQualifiedName
@@ -64,7 +64,7 @@ class JavaDocs(
             return Documentable.Method(
                 parentClass.documentable(),
                 yarnName(),
-                MethodDescriptor.read(yarnDescriptor())
+                MethodDescriptor.fromDescriptorString(yarnDescriptor())
             )
         }
 

@@ -4,14 +4,13 @@ import codegeneration.Public
 import metautils.api.*
 import metautils.codegeneration.*
 import metautils.codegeneration.asm.AsmCodeGenerator
-import metautils.descriptor.JvmPrimitiveType
-import metautils.descriptor.JvmType
-import metautils.descriptor.ReturnDescriptor
-import metautils.descriptor.remap
 import metautils.signature.*
+import metautils.types.jvm.JvmPrimitiveType
+import metautils.types.jvm.JvmType
+import metautils.types.jvm.ReturnDescriptor
+import metautils.types.jvm.remap
 import metautils.util.*
 import java.nio.file.Path
-import java.util.*
 
 
 internal data class ClassAbstractor(
@@ -51,12 +50,13 @@ internal data class ClassAbstractor(
 
         val mcClass = classApi.asType()
 
+        val additionalInterfaces = metadata.interfacesbase[classApi.name.toSlashQualifiedString(
+            true
+        )]?.map { JavaType.fromRawClassName(it) } ?: listOf()
+
         val interfaces = listOf(
             mcClass.remapToApiClass().pushAllTypeArgumentsToInnermostClass()
-        ) + (metadata.interfacesbase[classApi.name.toSlashQualifiedString(
-            true
-        )]?.map { ClassGenericType.fromRawClassString(it).noAnnotations() }
-            ?: Collections.emptyList())
+        ) + additionalInterfaces
             // With interfaces, baseclasses need to have the mc class as their super INTERFACE and not the super CLASS
             // Obv mc classes are not exposed to the user
             .applyIf(classApi.isInterface && !metadata.fitToPublicApi) { it + mcClass }
@@ -90,40 +90,16 @@ internal data class ClassAbstractor(
     private fun createApiInterface(outerClass: GeneratedClass?, destPath: Path?) = with(metadata.versionPackage) {
         val (packageName, shortName) = apiClassName(outerClass) { it.toApiClass() }
 
-//        if (!metadata.selector.classes(classApi).addInInterface) {
-        // If it wasn't selected but this was called anyway it means it's a stub class
-//        if (!metadata.selector.classes(classApi).addInInterface) {
-//            writeClass(destPath, ClassInfo(
-//                visibility = Visibility.Public,
-//                access = apiInterfaceAccess(metadata),
-//                shortName = shortName.innermostClass(),
-//                typeArguments = listOf(),
-//                superClass = null,
-//                annotations = listOf(),
-//                superInterfaces = listOf(),
-//                body = {
-//                    addBareBonesBody()
-//                }
-//            ), packageName, outerClass, isInnerClassStatic = true)
-//
-//            return@with
-//        }
-//            return@with
-//        }
-
-        // No need to add I for inner classes
-
-
         // If it's not a mc class then we add an asSuper() method
         val superClass = classApi.superClass?.let {
             if (it.isMcClass() && it.isAccessibleAsAbstractedApi()) it.remapToApiClass() else null
         }
 
-        val interfaces =
-            superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass) + (metadata.iinterfaces[classApi.name.toSlashQualifiedString(
-                true
-            )]?.map { ClassGenericType.fromRawClassString(it).noAnnotations() }
-                ?: Collections.emptyList())
+        val additionalInterfaces = metadata.iinterfaces[classApi.name.toSlashQualifiedString(
+            true
+        )]?.map { JavaType.fromRawClassName(it) } ?: listOf()
+        val interfaces = superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass) +
+                additionalInterfaces
 
         val classInfo = ClassInfo(
             visibility = Visibility.Public,

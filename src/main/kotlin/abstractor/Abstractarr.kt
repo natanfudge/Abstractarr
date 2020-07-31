@@ -1,9 +1,6 @@
 package abstractor
 
-import metautils.codegeneration.ClassAccess
-import metautils.codegeneration.ClassVariant
 import codegeneration.Public
-import metautils.codegeneration.Visibility
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -12,11 +9,17 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import metautils.api.*
+import metautils.codegeneration.ClassAccess
+import metautils.codegeneration.ClassVariant
+import metautils.codegeneration.Visibility
 import metautils.codegeneration.asm.toAsmAccess
 import metautils.signature.ClassGenericType
 import metautils.signature.fromNameAndTypeArgs
 import metautils.signature.toClassfileName
 import metautils.signature.toTypeArgumentsOfNames
+import metautils.types.jvm.FieldType
+import metautils.types.jvm.JvmType
+import metautils.types.jvm.MethodDescriptor
 import metautils.util.*
 import java.nio.file.Path
 
@@ -58,7 +61,7 @@ data class TargetSelector(
             if (it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
             else ClassAbstractionType.BaseclassAndInterface
         },
-            {  MemberAbstractionType.BaseclassAndInterface },
+            { MemberAbstractionType.BaseclassAndInterface },
             { MemberAbstractionType.BaseclassAndInterface }
         )
     }
@@ -140,9 +143,10 @@ class Abstractor /*private*/ constructor(
 //                println()
 
 
-                val abstractedClasses = classNamesToClasses.values.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
-                    // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
-                    .flatMap { it.outerClassesToThis() }
+                val abstractedClasses =
+                    classNamesToClasses.values.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
+                        // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
+                        .flatMap { it.outerClassesToThis() }
 
                 usage(
                     Abstractor(
@@ -170,7 +174,13 @@ class Abstractor /*private*/ constructor(
                 for (classApi in abstractedClasses.filter { !it.isInnerClass }) {
 //                    if (!classApi.isPublicApiAsOutermostMember) continue
                     launch(Dispatchers.IO) {
-                        ClassAbstractor(metadata, index, classApi, classNamesToClasses, abstractedClasses.map { it.name }.toSet())
+                        ClassAbstractor(
+                            metadata,
+                            index,
+                            classApi,
+                            classNamesToClasses,
+                            abstractedClasses.map { it.name }.toSet()
+                        )
                             .abstractClass(destPath = destDir)
                     }
                 }
