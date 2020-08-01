@@ -142,15 +142,20 @@ class Abstractor /*private*/ constructor(
 //                Paths.get("test.txt").writeString(str)
 //                println()
 
+                val allClasses = classNamesToClasses.values
 
-                val abstractedClasses =
-                    classNamesToClasses.values.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
+                val abstractedClasses = allClasses.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
                         // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
-                        .flatMap { it.outerClassesToThis() }
+                        .flatMap { it.outerClassesToThis() }.toHashSet()
+
+                // Add in subclasses of abstracted classes as well
+                val subclassesOfAbstractedClasses = allClasses.filter { classApi ->
+                    classApi.isPublicApi && classApi.getAllSuperClasses { classNamesToClasses[it] }.any { it in abstractedClasses }
+                }
 
                 usage(
                     Abstractor(
-                        abstractedClasses = abstractedClasses,
+                        abstractedClasses = (abstractedClasses + subclassesOfAbstractedClasses).distinct(),
                         classNamesToClasses = classNamesToClasses,
                         index = index
                     )
