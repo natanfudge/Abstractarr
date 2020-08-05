@@ -17,55 +17,9 @@ import metautils.signature.ClassGenericType
 import metautils.signature.fromNameAndTypeArgs
 import metautils.signature.toClassfileName
 import metautils.signature.toTypeArgumentsOfNames
-import metautils.types.jvm.FieldType
-import metautils.types.jvm.JvmType
-import metautils.types.jvm.MethodDescriptor
 import metautils.util.*
 import java.nio.file.Path
 
-interface IAbstractionType {
-    val isAbstracted: Boolean
-    val addInInterface: Boolean
-    val addInBaseclass: Boolean
-}
-
-enum class MemberAbstractionType : IAbstractionType {
-    None,
-    Interface,
-    Baseclass,
-    BaseclassAndInterface;
-
-    override val isAbstracted get() = this != None
-    override val addInInterface get() = this == Interface || this == BaseclassAndInterface
-    override val addInBaseclass get() = this == Baseclass || this == BaseclassAndInterface
-}
-
-enum class ClassAbstractionType : IAbstractionType {
-    None,
-    Interface,
-    BaseclassAndInterface;
-
-    override val isAbstracted get() = this != None
-    override val addInInterface get() = this == Interface || this == BaseclassAndInterface
-    override val addInBaseclass get() = this == BaseclassAndInterface
-}
-
-data class TargetSelector(
-    val classes: (ClassApi) -> ClassAbstractionType,
-    val methods: (ClassApi.Method) -> MemberAbstractionType,
-    val fields: (ClassApi.Field) -> MemberAbstractionType
-) {
-    companion object {
-        val All = TargetSelector({
-            // Non-static inner class baseclasses are not supported yet
-            if (it.isInnerClass && !it.isStatic) ClassAbstractionType.Interface
-            else ClassAbstractionType.BaseclassAndInterface
-        },
-            { MemberAbstractionType.BaseclassAndInterface },
-            { MemberAbstractionType.BaseclassAndInterface }
-        )
-    }
-}
 
 data class AbstractionMetadata(
     val iinterfaces: Map<String, Collection<String>> = mapOf(),
@@ -144,13 +98,15 @@ class Abstractor /*private*/ constructor(
 
                 val allClasses = classNamesToClasses.values
 
-                val abstractedClasses = allClasses.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
+                val abstractedClasses =
+                    allClasses.filter { metadata.selector.classes(it).isAbstracted && it.isPublicApi }
                         // Also add the outer classes, to prevent cases where only an inner class is abstracted and not the outer one.
                         .flatMap { it.outerClassesToThis() }.toHashSet()
 
                 // Add in subclasses of abstracted classes as well
                 val subclassesOfAbstractedClasses = allClasses.filter { classApi ->
-                    classApi.isPublicApi && classApi.getAllSuperClasses { classNamesToClasses[it] }.any { it in abstractedClasses }
+                    classApi.isPublicApi && classApi.getAllSuperClasses { classNamesToClasses[it] }
+                        .any { it in abstractedClasses }
                 }
 
                 usage(
@@ -210,7 +166,7 @@ internal fun buildAbstractionManifest(
     version: VersionPackage
 ): AbstractionManifest = with(version) {
     classesWithApiInterfaces.map { mcClass ->
-        val mcClassName = mcClass.name.toSlashQualifiedString()
+        val mcClassName = mcClass.name.toSlashString()
         val apiClass = mcClass.name.toApiClass()
         val oldSignature = mcClass.getSignature()
         val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
@@ -220,7 +176,7 @@ internal fun buildAbstractionManifest(
 
         val newSignature = oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
         mcClassName to AbstractedClassInfo(
-            apiClassName = apiClass.toSlashQualifiedString(),
+            apiClassName = apiClass.toSlashString(),
             newSignature = newSignature.toClassfileName()
         )
     }.toMap()
@@ -256,9 +212,11 @@ private fun entryJustForAccess(access: ClassAccess, visibility: Visibility, isSt
     return ClassEntry(
         methods = mapOf(), superInterfaces = listOf(), superClass = null,
         access = access.toAsmAccess(visibility, isStatic),
-        name = QualifiedName.Empty
+        name = placeHolderClassName
     )
 }
+
+private val placeHolderClassName = QualifiedName.fromClassName("<placeholder>")
 
 
 internal fun apiInterfaceAccess(metadata: AbstractionMetadata) = ClassAccess(

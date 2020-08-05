@@ -3,15 +3,15 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
+import metautils.api.AbstractionType
+import metautils.api.TargetSelector
 import metautils.asm.readToClassNode
-import metautils.types.jvm.JvmPrimitiveType
 import metautils.types.jvm.MethodDescriptor
-import metautils.types.jvm.ObjectType
-import metautils.types.jvm.ReturnDescriptor
 import metautils.testing.getResource
 import metautils.testing.getResources
 import metautils.testing.verifyClassFiles
 import metautils.util.*
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.objectweb.asm.util.ASMifier
 import org.objectweb.asm.util.TraceClassVisitor
@@ -30,7 +30,6 @@ class TestAbstraction {
             val implDest = mcJar.parent.resolve("abstractedAsm")
             val apiDest = mcJar.parent.resolve("abstractedAsmApi")
             val apiSrcDest = mcJar.parent.resolve("abstractAsmApi-sources")
-
 
             val metadata = AbstractionMetadata(
                     versionPackage = VersionPackage("v1"),
@@ -67,22 +66,22 @@ class TestAbstraction {
 
 
     @Test
-//    @Disabled
+    @Disabled
     fun testAllMc() {
         testMc(TargetSelector.All, suffix = "All")
     }
 
     @Test
-//    @Disabled
+    @Disabled
     fun testFilteredMc() {
         testMc(TargetSelector(
                 classes = {
-                    if (it.name.shortName.toDollarQualifiedString() in setOf("Block",/*"AbstractBlock",*/"Material", "AbstractBlock\$Settings")) {
-                        ClassAbstractionType.BaseclassAndInterface
-                    } else ClassAbstractionType.None
+                    if (it.name.shortName.toDollarString() in setOf("Block",/*"AbstractBlock",*/"Material", "AbstractBlock\$Settings")) {
+                        AbstractionType.BaseclassAndInterface
+                    } else AbstractionType.None
                 },
-                methods = {  MemberAbstractionType.BaseclassAndInterface },
-                fields = {  MemberAbstractionType.BaseclassAndInterface }
+                methods = {  AbstractionType.BaseclassAndInterface },
+                fields = {  AbstractionType.BaseclassAndInterface }
         ), suffix = "Filtered")
     }
 
@@ -117,47 +116,33 @@ class TestAbstraction {
     }
 
     private fun testJavadocs(): JavaDocs {
-        val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toQualifiedName(dotQualified = false))
+        val testClass = Documentable.Class("net/minecraft/TestConcreteClass".toSlashQualifiedName())
         val testField = Documentable.Field(testClass, "publicField")
         val testConstructor = Documentable.Method(
-                testClass, "<init>", MethodDescriptor(
-                listOf(
-                        JvmPrimitiveType.Int,
-                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
-                ),
-                ReturnDescriptor.Void
-        )
+                testClass, "<init>",
+            MethodDescriptor.fromDescriptorString("(ILnet/minecraft/TestOtherClass;)V")
         )
         val testConstructorParam = Documentable.Parameter(testConstructor, 1)
         val testMethod = Documentable.Method(
-                testClass, "publicInt", MethodDescriptor(
-                listOf(
-                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
-                ),
-                JvmPrimitiveType.Int
-        )
+                testClass, "publicInt",
+            MethodDescriptor.fromDescriptorString("(Lnet/minecraft/TestOtherClass;)I")
         )
         val testMethodParam = Documentable.Parameter(testMethod, 0)
 
         val testProtectedMethod = Documentable.Method(
                 testClass, "protectedStaticParam",
-                MethodDescriptor(listOf(JvmPrimitiveType.Int), ReturnDescriptor.Void)
+            MethodDescriptor.fromDescriptorString("(I)V")
         )
 
         val testProtectedMethodParam = Documentable.Parameter(testProtectedMethod, 0)
 
         val testInnerClass = Documentable.Class(
-                "net/minecraft/TestConcreteClass\$TestInnerClass".toQualifiedName(dotQualified = false)
+            "net/minecraft/TestConcreteClass\$TestInnerClass".toSlashQualifiedName()
         )
 
         val testInnerClassConstructor = Documentable.Method(
-                testInnerClass, "<init>", MethodDescriptor(
-                listOf(
-                        JvmPrimitiveType.Int,
-                        ObjectType("net/minecraft/TestOtherClass".toQualifiedName(dotQualified = false))
-                ),
-                ReturnDescriptor.Void
-        )
+                testInnerClass, "<init>",
+            MethodDescriptor.fromDescriptorString("(ILnet/minecraft/TestOtherClass;)V")
         )
 
         val testInnerClassConstructorParam1 = Documentable.Parameter(testInnerClassConstructor, 1)

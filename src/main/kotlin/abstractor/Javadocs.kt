@@ -56,7 +56,7 @@ class JavaDocs(
         private fun Mapped.yarnName() = getName("named")
         private fun Descriptored.yarnDescriptor() = getDescriptor("named")
         private fun ClassDef.documentable(): Documentable.Class {
-            return Documentable.Class(yarnName().toQualifiedName(dotQualified = false))
+            return Documentable.Class(yarnName().toQualifiedName(slashQualified = true))
         }
 
         private fun MethodDef.documentable(parentClass: ClassDef): Documentable.Method {

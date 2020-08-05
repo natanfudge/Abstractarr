@@ -132,10 +132,7 @@ import metautils.util.Tree
 //}
 //
 //
-interface GraphNode : Tree {
-    val presentableName: String
-    val globallyUniqueIdentifier: String
-}
+
 //
 ////private fun GraphNode.
 //

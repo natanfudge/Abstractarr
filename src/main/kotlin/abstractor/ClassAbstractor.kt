@@ -50,7 +50,7 @@ internal data class ClassAbstractor(
 
         val mcClass = classApi.asType()
 
-        val additionalInterfaces = metadata.interfacesbase[classApi.name.toSlashQualifiedString(
+        val additionalInterfaces = metadata.interfacesbase[classApi.name.toSlashString(
             true
         )]?.map { JavaType.fromRawClassName(it) } ?: listOf()
 
@@ -95,7 +95,7 @@ internal data class ClassAbstractor(
             if (it.isMcClass() && it.isAccessibleAsAbstractedApi()) it.remapToApiClass() else null
         }
 
-        val additionalInterfaces = metadata.iinterfaces[classApi.name.toSlashQualifiedString(
+        val additionalInterfaces = metadata.iinterfaces[classApi.name.toSlashString(
             true
         )]?.map { JavaType.fromRawClassName(it) } ?: listOf()
         val interfaces = superInterfacesAccessibleAsAbstractedApi().remapToApiClasses().appendIfNotNull(superClass) +

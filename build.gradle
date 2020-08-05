@@ -7,8 +7,10 @@ plugins {
 }
 
 
+
 def resultTestSet = sourceSets.create("resultTest")
 def resultTestMcSet = sourceSets.create("resultTestMcOnly")
+
 
 apply plugin: MetaUtils
 
@@ -27,8 +29,8 @@ metaUtils {
     resultTestMcSet.compileClasspath += sourceSets.test.compileClasspath
     resultTestMcSet.runtimeClasspath += sourceSets.test.runtimeClasspath
     resultTestMcSet.compileClasspath += mcJar.output
-    resultTestSet.compileClasspath +=resultTestMcSet.output
-    resultTestSet.runtimeClasspath +=resultTestMcSet.output
+    resultTestSet.compileClasspath += resultTestMcSet.output
+    resultTestSet.runtimeClasspath += resultTestMcSet.output
 
     sourceSets.test.runtimeClasspath += apiRuntime.output // For verifying asm output
 
@@ -68,6 +70,7 @@ repositories {
     mavenCentral()
     jcenter()
     maven { url = "https://maven.fabricmc.net/" }
+    maven { url = "https://dl.bintray.com/febb/maven" }
 }
 
 dependencies {
@@ -77,6 +80,9 @@ dependencies {
     implementation 'org.ow2.asm:asm-tree:8.0.1'
     implementation 'com.squareup:javapoet:1.12.1'
     implementation 'org.ow2.asm:asm-util:8.0.1'
+    implementation "io.github.febb:metautils:0.2.1+build.+"
+
+
     api "org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.20.0" // JVM dependency
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.7'
 

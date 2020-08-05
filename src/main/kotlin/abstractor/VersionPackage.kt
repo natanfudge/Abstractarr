@@ -11,22 +11,20 @@ class VersionPackage internal constructor(private val versionPackage: String) {
         fun fromMcVersion(mcVersion: String) = VersionPackage("v" + mcVersion.replace(".", "_"))
     }
 
-    private fun PackageName?.toApiPackageName() = versionPackage.prependToQualified(this ?: PackageName.Empty)
-    private fun ShortClassName.toApiShortClassName() =
-        ShortClassName(("I" + outerMostClass()).prependTo(innerClasses()))
+    private fun PackageName.toApiPackageName() = versionPackage.prependToQualified(this)
+    private fun ShortClassName.toApiShortClassName() = mapOutermostClassName { "I$it" }
 
     fun QualifiedName.toApiClass(): QualifiedName = if (isMcClassName()) {
-        QualifiedName(
+        copy(
             packageName = packageName.toApiPackageName(),
             shortName = shortName.toApiShortClassName()
         )
     } else this
 
-    private fun ShortClassName.toBaseShortClassName() =
-        ShortClassName(("Base" + outerMostClass()).prependTo(innerClasses()))
+    private fun ShortClassName.toBaseShortClassName() = mapOutermostClassName { "Base$it" }
 
     fun QualifiedName.toBaseClass(): QualifiedName =
-        QualifiedName(
+        copy(
             packageName = packageName.toApiPackageName(),
             shortName = shortName.toBaseShortClassName()
         )
