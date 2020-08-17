@@ -1,10 +1,10 @@
 rootProject.name = 'Abstractarr'
 
 
-//if (file("../MetaUtils-Releases").exists()) {
-//    includeBuild("../MetaUtils-Releases") {
-//        dependencySubstitution {
-//            substitute module('io.github.febb:metautils') with project(':')
-//        }
-//    }
-//}
+if (file("../MetaUtils-Releases").exists()) {
+    includeBuild("../MetaUtils-Releases") {
+        dependencySubstitution {
+            substitute module('io.github.febb:metautils') with project(':')
+        }
+    }
+}

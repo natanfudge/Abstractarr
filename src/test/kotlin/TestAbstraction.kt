@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonConfiguration
 import metautils.api.AbstractionType
 import metautils.api.TargetSelector
 import metautils.asm.readToClassNode
-import metautils.types.jvm.MethodDescriptor
+import metautils.types.MethodDescriptor
 import metautils.testing.getResource
 import metautils.testing.getResources
 import metautils.testing.verifyClassFiles
@@ -66,13 +66,13 @@ class TestAbstraction {
 
 
     @Test
-    @Disabled
+//    @Disabled
     fun testAllMc() {
         testMc(TargetSelector.All, suffix = "All")
     }
 
     @Test
-    @Disabled
+//    @Disabled
     fun testFilteredMc() {
         testMc(TargetSelector(
                 classes = {

@@ -5,10 +5,8 @@ import metautils.api.*
 import metautils.codegeneration.*
 import metautils.codegeneration.asm.AsmCodeGenerator
 import metautils.signature.*
-import metautils.types.jvm.JvmPrimitiveType
-import metautils.types.jvm.JvmType
-import metautils.types.jvm.ReturnDescriptor
-import metautils.types.jvm.remap
+import metautils.types.JvmPrimitiveTypes
+import metautils.types.JvmType
 import metautils.util.*
 import java.nio.file.Path
 
@@ -125,7 +123,7 @@ internal data class ClassAbstractor(
     private fun writeClass(
         destPath: Path?,
         classInfo: ClassInfo,
-        packageName: PackageName?,
+        packageName: PackageName,
         outerClass: GeneratedClass?,
         isInnerClassStatic: Boolean
     ) {
@@ -348,7 +346,7 @@ internal data class ClassAbstractor(
                 // (so when mc calls it it will reach the api overrides)
                 methodAccess = method.access,
                 receiverAccess = classApi.access/*.copy(variant = ClassVariant.Interface)*/,
-                owner = with((metadata.versionPackage)) { mcClassType.toJvmType().remap { it.toBaseClass() } }
+                owner = with((metadata.versionPackage)) { mcClassType.toJvmType().map { it.toBaseClass() } }
             )
 
             if (!method.isVoid) {
@@ -579,7 +577,7 @@ internal data class ClassAbstractor(
     }
 
     private fun ClassApi.Field.getGetterPrefix(): String =
-        if (type.type.let { it is GenericsPrimitiveType && it.primitive == JvmPrimitiveType.Boolean }) {
+        if (type.type.let { it is GenericsPrimitiveType && it.primitive == JvmPrimitiveTypes.Boolean }) {
             if (name.startsWith(BooleanGetterPrefix)) "" else BooleanGetterPrefix
         } else "get"
 
@@ -882,7 +880,7 @@ internal data class ClassAbstractor(
     private fun <T : GenericReturnType> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }
 
-    private fun <T : ReturnDescriptor> T.remapToApiClass(): T =
+    private fun <T : NameMappable<T>> T.remapToApiClass(): T =
         with(metadata.versionPackage) { remapToApiClass() }
 
     private fun List<TypeArgumentDeclaration>.remapDeclToApiClasses(): List<TypeArgumentDeclaration> =

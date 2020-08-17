@@ -2,9 +2,9 @@ package analyzer
 
 import metautils.api.JavaAnnotation
 import metautils.asm.readToClassNode
-import metautils.types.jvm.FieldDescriptor
-import metautils.types.jvm.MethodDescriptor
+import metautils.types.MethodDescriptor
 import metautils.signature.*
+import metautils.types.JvmType
 import metautils.util.*
 import org.objectweb.asm.tree.*
 import java.nio.file.Path
@@ -31,7 +31,8 @@ private fun analyze(jar: Path, destKeys: Path, destValues: Path) {
         .groupBy { it.name }
         .entries
         .sortedByDescending { it.value.size }
-        .map { Statistic(it.key.presentableName, it.value.size) }
+        .map {
+            Statistic(it.key.toString(), it.value.size) }
 //        .joinToString(", ") { (name, usages) -> name.presentableName + ":" + usages.size.toString() }
 
     destKeys.writeString(statistics.humanReadable())
@@ -85,7 +86,7 @@ private fun fieldSignatureUsages(signature: String?) =
         signatureUsages(signature) { FieldSignature.readFrom(it, null) }
 
 private fun fieldDescriptorUsages(descriptor: String) =
-    FieldDescriptor.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
+    JvmType.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
 
 private fun MethodNode.usages(): List<Usage> {
     val annotationUsages = annotationUsages(

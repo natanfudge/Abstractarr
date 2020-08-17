@@ -3,7 +3,9 @@ package abstractor
 import metautils.api.JavaType
 import metautils.api.remap
 import metautils.signature.*
-import metautils.types.jvm.*
+import metautils.types.ArrayType
+import metautils.types.JvmType
+import metautils.types.ObjectType
 import metautils.util.*
 
 class VersionPackage internal constructor(private val versionPackage: String) {
@@ -29,7 +31,7 @@ class VersionPackage internal constructor(private val versionPackage: String) {
             shortName = shortName.toBaseShortClassName()
         )
 
-    fun <T : ReturnDescriptor> T.remapToApiClass(): T = remap { it.toApiClass() }
+    fun <T : NameMappable<T>> T.remapToApiClass(): T = map { it.toApiClass() }
     fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> = remap { it.toApiClass() }
 
     fun <T : GenericReturnType> T.remapToApiClass(): T = remap { it.toApiClass() }
