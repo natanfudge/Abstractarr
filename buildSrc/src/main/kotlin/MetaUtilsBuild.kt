@@ -92,7 +92,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
 //                            println("Replacing superclass of ${classNode.name} from ${classNode.superName} to $newName")
 //                            classNode.superName = newName
 //                        } else {
-                            println("Attaching interface $newName to ${classNode.name}")
+//                            println("Attaching interface $newName to ${classNode.name}")
                             classNode.interfaces.add(newName)
 //                        }
                         if (classNode.signature != null) {

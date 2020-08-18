@@ -1,35 +1,34 @@
 package abstractor
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonConfiguration
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.*
 import metautils.util.downloadUtfStringFromUrl
 
 object Minecraft {
     data class Library(val url: String, val filePath: String)
 
-    private val json = Json(JsonConfiguration.Stable)
+//    private val json = Json(JsonConfiguration.Stable)
 
     fun downloadVersionManifestList(): JsonObject {
-        val versionManifestsString = downloadUtfStringFromUrl("https://launchermeta.mojang.com/mc/game/version_manifest.json")
-        return json.parseJson(versionManifestsString).jsonObject
+        val versionManifestsString =
+            downloadUtfStringFromUrl("https://launchermeta.mojang.com/mc/game/version_manifest.json")
+        return Json.parseToJsonElement(versionManifestsString).jsonObject
     }
 
     fun downloadVersionManifest(versionManifestList: JsonObject, version: String): JsonObject {
-        val url = versionManifestList.getArray("versions")
+        val url = versionManifestList.getValue("versions").jsonArray
             .map { it.jsonObject }
-            .find { it.getPrimitive("id").content == version }
-            ?.getPrimitive("url")?.content
+            .find { it.getValue("id").jsonPrimitive.content == version }
+            ?.getValue("url")?.jsonPrimitive?.content
             ?: error("No such abstractor.Minecraft version '$version'")
-        return json.parseJson(downloadUtfStringFromUrl(url)).jsonObject
+        return Json.parseToJsonElement(downloadUtfStringFromUrl(url)).jsonObject
     }
 
     fun getLibraryUrls(versionManifest: JsonObject): List<Library> {
-        return versionManifest.getArray("libraries").map {
-            val artifact = it.jsonObject.getObject("downloads").getObject("artifact")
+        return versionManifest.getValue("libraries").jsonArray.map {
+            val artifact = it.jsonObject.getValue("downloads").jsonObject.getValue("artifact").jsonObject
             Library(
-                artifact.getPrimitive("url").content,
-                artifact.getPrimitive("path").content
+                artifact.getValue("url").jsonPrimitive.content,
+                artifact.getValue("path").jsonPrimitive.content
             )
         }.distinctBy { it.filePath }
     }

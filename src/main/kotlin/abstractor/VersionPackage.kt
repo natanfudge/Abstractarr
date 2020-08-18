@@ -1,7 +1,6 @@
 package abstractor
 
 import metautils.api.JavaType
-import metautils.api.remap
 import metautils.signature.*
 import metautils.types.ArrayType
 import metautils.types.JvmType
@@ -25,6 +24,7 @@ class VersionPackage internal constructor(private val versionPackage: String) {
 
     private fun ShortClassName.toBaseShortClassName() = mapOutermostClassName { "Base$it" }
 
+    //TODO: refactor with new NameMappable
     fun QualifiedName.toBaseClass(): QualifiedName =
         copy(
             packageName = packageName.toApiPackageName(),
@@ -32,9 +32,9 @@ class VersionPackage internal constructor(private val versionPackage: String) {
         )
 
     fun <T : NameMappable<T>> T.remapToApiClass(): T = map { it.toApiClass() }
-    fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> = remap { it.toApiClass() }
-
-    fun <T : GenericReturnType> T.remapToApiClass(): T = remap { it.toApiClass() }
+//    fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> = map { it.toApiClass() }
+//
+//    fun <T : GenericReturnType> T.remapToApiClass(): T = remap { it.toApiClass() }
     fun List<TypeArgumentDeclaration>.remapDeclToApiClasses() = map { typeArg ->
         typeArg.copy(
             classBound = typeArg.classBound?.remapToApiClass(),

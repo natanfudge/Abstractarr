@@ -37,10 +37,10 @@ internal fun JavaClassType.pushAllTypeArgumentsToInnermostClass(): JavaClassType
     copy(type = type.pushAllTypeArgumentsToInnermostClass())
 
 internal fun ClassGenericType.pushAllTypeArgumentsToInnermostClass(): ClassGenericType {
-    val allArgs = classNameSegments.flatMap { it.typeArguments ?: listOf() }
+    val allArgs = classNameSegments.flatMap { it.typeArguments  }
     val modifiedSegments = classNameSegments.mapIndexed { index, segment ->
         segment.copy(typeArguments =
-        if (index == classNameSegments.size - 1) allArgs.let { if (it.isEmpty()) null else it } else null
+        if (index == classNameSegments.size - 1) allArgs.let { if (it.isEmpty()) listOf() else it } else listOf()
         )
     }
     return copy(classNameSegments = modifiedSegments)

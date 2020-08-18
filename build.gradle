@@ -1,7 +1,7 @@
 
 plugins {
-    id("org.jetbrains.kotlin.jvm") version "1.3.72"
-    id 'org.jetbrains.kotlin.plugin.serialization' version '1.3.70'
+    id("org.jetbrains.kotlin.jvm") version "1.4.0"
+    id 'org.jetbrains.kotlin.plugin.serialization' version '1.4.0'
     id "com.jfrog.bintray" version "1.8.5"
     id "maven-publish"
 }
@@ -83,7 +83,7 @@ dependencies {
     implementation "io.github.febb:metautils:0.2.1+build.+"
 
 
-    api "org.jetbrains.kotlinx:kotlinx-serialization-runtime:0.20.0" // JVM dependency
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.0.0-RC") // JVM dependency
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.3.7'
 
 //    implementation 'io.github.fudge:forgedflower:1.7.0'

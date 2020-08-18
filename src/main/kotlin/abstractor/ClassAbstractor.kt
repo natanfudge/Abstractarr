@@ -364,7 +364,7 @@ internal data class ClassAbstractor(
             isStatic = method.isStatic,
             isAbstract = false,
             returnType = mcReturnType,
-            typeArguments = method.typeArguments.remapDeclToApiClasses()
+            typeArguments = method.typeArguments.remapToApiClasses()
         )
     }
 
@@ -416,7 +416,7 @@ internal data class ClassAbstractor(
             isStatic = method.isStatic,
             isAbstract = noBody,
             returnType = returnType,
-            typeArguments = method.typeArguments.remapDeclToApiClasses()
+            typeArguments = method.typeArguments.remapToApiClasses()
         )
 
     }
@@ -604,7 +604,7 @@ internal data class ClassAbstractor(
                 )
             ),
             visibility = field.visibility,
-            returnType = GenericReturnType.Void.noAnnotations(),
+            returnType = VoidGenericReturnType.noAnnotations(),
             abstract = false,
             static = field.isStatic,
             final = metadata.fitToPublicApi,
@@ -651,7 +651,7 @@ internal data class ClassAbstractor(
                         getJavadoc(constructor.parameterDocumentable(innerClass, i))
                     )
                 },
-                typeArguments = innerClass.typeArguments.remapDeclToApiClasses(),
+                typeArguments = innerClass.typeArguments.remapToApiClasses(),
                 throws = constructor.throws
             ) {
                 getJavadoc(constructor.documentable())?.let { addJavadoc(it) }
@@ -817,7 +817,7 @@ internal data class ClassAbstractor(
                     } else superClass
                 }
 
-            classApiOfCurrent = mcClasses[current!!.type.toJvmQualifiedName()]
+            classApiOfCurrent = mcClasses[current.type.toJvmQualifiedName()]
         } while (classApiOfCurrent != null)  // If it's null then it means we've reached a non-mc superclass
 
         return current
@@ -842,7 +842,7 @@ internal data class ClassAbstractor(
         if (indexOfOldName == -1) return this
 
         // innerMostClassPassedArgs = <String, T>
-        val innerMostClassPassedArgs = superClassType.type.classNameSegments.last().typeArguments!!
+        val innerMostClassPassedArgs = superClassType.type.classNameSegments.last().typeArguments
         // inlinedVariableAsArgument = TypeArgument(T)
         val inlinedVariableAsArgument = innerMostClassPassedArgs[indexOfOldName]
         // You can't pass wildcards as a superclass type argument
@@ -874,17 +874,20 @@ internal data class ClassAbstractor(
 
 ////////// REMAPPING /////////
 
-    private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
-        with(metadata.versionPackage) { remapToApiClass() }
+    private fun <T : NameMappable<T>> T.remapToApiClass() = with(metadata.versionPackage) { remapToApiClass() }
+    private fun <T : NameMappable<T>> List<T>.remapToApiClasses() = map { it.remapToApiClass() }
 
-    private fun <T : GenericReturnType> T.remapToApiClass(): T =
-        with(metadata.versionPackage) { remapToApiClass() }
-
-    private fun <T : NameMappable<T>> T.remapToApiClass(): T =
-        with(metadata.versionPackage) { remapToApiClass() }
-
-    private fun List<TypeArgumentDeclaration>.remapDeclToApiClasses(): List<TypeArgumentDeclaration> =
-        with(metadata.versionPackage) { remapDeclToApiClasses() }
+//    private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
+//
+//
+//    private fun <T : GenericReturnType> T.remapToApiClass(): T =
+//        with(metadata.versionPackage) { remapToApiClass() }
+//
+//    private fun <T : NameMappable<T>> T.remapToApiClass(): T =
+//        with(metadata.versionPackage) { remapToApiClass() }
+//
+//    private fun List<TypeArgumentDeclaration>.remapDeclToApiClasses(): List<TypeArgumentDeclaration> =
+//        with(metadata.versionPackage) { remapDeclToApiClasses() }
 
 /////////// CASTING //////////
 

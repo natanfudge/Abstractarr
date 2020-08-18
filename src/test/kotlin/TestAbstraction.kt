@@ -3,6 +3,7 @@ import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonConfiguration
+import kotlinx.serialization.stringify
 import metautils.api.AbstractionType
 import metautils.api.TargetSelector
 import metautils.asm.readToClassNode
@@ -43,11 +44,11 @@ class TestAbstraction {
                 abstractor.abstract(apiSrcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
             }
 
-            val manifestJson = Json(
-                    JsonConfiguration(prettyPrint = true)
-            ).stringify(
-                    MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
-                    manifest
+            val manifestJson = Json {
+                prettyPrint = true
+            }.encodeToString(
+                MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
+                manifest
             )
 
             verifyClassFiles(implDest, listOf(mcJar))
@@ -103,9 +104,9 @@ class TestAbstraction {
                 it.abstract(srcDest, metadata = metadata.copy(fitToPublicApi = true, writeRawAsm = false))
             }
 
-            val manifestJson = Json(
-                    JsonConfiguration(prettyPrint = true)
-            ).stringify(AbstractionManifestSerializer, manifest)
+//            val manifestJson = Json {
+//                prettyPrint = true
+//                    }.encodeToString(AbstractionManifestSerializer, manifest)
 
 //            Paths.get("mcmanifest.json").writeString(manifestJson)
 

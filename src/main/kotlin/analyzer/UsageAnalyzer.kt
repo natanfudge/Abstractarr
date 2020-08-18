@@ -68,7 +68,7 @@ private fun ClassNode.usages(): List<Usage> {
 }
 
 private fun classSignatureUsages(signature: String?) =
-        signatureUsages(signature) { ClassSignature.readFrom(it, null) }
+        signatureUsages(signature) { ClassSignature.fromSignatureString(it, null) }
 
 private fun FieldNode.usages(): List<Usage> {
     val annotationUsages = annotationUsages(
@@ -83,7 +83,7 @@ private fun FieldNode.usages(): List<Usage> {
 }
 
 private fun fieldSignatureUsages(signature: String?) =
-        signatureUsages(signature) { FieldSignature.readFrom(it, null) }
+        signatureUsages(signature) { FieldSignature.fromFieldSignature(it, null) }
 
 private fun fieldDescriptorUsages(descriptor: String) =
     JvmType.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
@@ -111,7 +111,7 @@ private fun methodDescriptorUsages(descriptor: String) =
         MethodDescriptor.fromDescriptorString(descriptor).getContainedNamesRecursively().map { Usage.Class(it) }
 
 private fun methodSignatureUsages(signature: String?) =
-        signatureUsages(signature) { MethodSignature.readFrom(it, null) }
+        signatureUsages(signature) { MethodSignature.fromSignatureString(it, null) }
 
 private fun AbstractInsnNode.usages(): List<Usage> {
     val annotationUsages = annotationUsages(visibleTypeAnnotations, invisibleTypeAnnotations)
