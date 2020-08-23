@@ -67,13 +67,13 @@ class TestAbstraction {
 
 
     @Test
-//    @Disabled
+    @Disabled
     fun testAllMc() {
         testMc(TargetSelector.All, suffix = "All")
     }
 
     @Test
-//    @Disabled
+    @Disabled
     fun testFilteredMc() {
         testMc(TargetSelector(
                 classes = {

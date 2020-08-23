@@ -4,6 +4,7 @@ import metautils.asm.opCode
 import metautils.api.*
 import metautils.signature.ArrayGenericType
 import metautils.signature.ClassGenericType
+import metautils.signature.withSegments
 import metautils.util.ClasspathIndex
 import org.objectweb.asm.Opcodes
 
@@ -43,7 +44,7 @@ internal fun ClassGenericType.pushAllTypeArgumentsToInnermostClass(): ClassGener
         if (index == classNameSegments.size - 1) allArgs.let { if (it.isEmpty()) listOf() else it } else listOf()
         )
     }
-    return copy(classNameSegments = modifiedSegments)
+    return this.withSegments(modifiedSegments)
 }
 
 //soft to do: this is a bad solution. What we need to do is have remapToApiClass go through the tree and selectively

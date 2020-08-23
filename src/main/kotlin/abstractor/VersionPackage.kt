@@ -32,18 +32,21 @@ class VersionPackage internal constructor(private val versionPackage: String) {
         )
 
     fun <T : NameMappable<T>> T.remapToApiClass(): T = map { it.toApiClass() }
+    fun <T : NameMappable<T>> List<T>.remapToApiClassesOld(): List<T> = mapElementsOld { it.toApiClass() }
+    fun <T : Mappable<T>> T.remapToApiClass(): T = map { it.toApiClass() }
+    fun <T : Mappable<T>> List<T>.remapToApiClasses(): List<T> = mapElements { it.toApiClass() }
 //    fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> = map { it.toApiClass() }
 //
 //    fun <T : GenericReturnType> T.remapToApiClass(): T = remap { it.toApiClass() }
-    fun List<TypeArgumentDeclaration>.remapDeclToApiClasses() = map { typeArg ->
-        typeArg.copy(
-            classBound = typeArg.classBound?.remapToApiClass(),
-            interfaceBounds = typeArg.interfaceBounds.map { it.remapToApiClass() })
-    }
-
-
-    fun <T : GenericReturnType> List<JavaType<T>>.remapToApiClasses(): List<JavaType<T>> =
-        map { it.remapToApiClass() }
+//    fun List<TypeArgumentDeclaration>.remapDeclToApiClasses() = map { typeArg ->
+//        typeArg.copy(
+//            classBound = typeArg.classBound?.remapToApiClass(),
+//            interfaceBounds = typeArg.interfaceBounds.map { it.remapToApiClass() })
+//    }
+//
+//
+//    fun <T : GenericReturnType> List<JavaType<T>>.remapToApiClasses(): List<JavaType<T>> =
+//        map { it.remapToApiClass() }
 }
 
 fun PackageName?.isMcPackage(): Boolean = if (this == null) false

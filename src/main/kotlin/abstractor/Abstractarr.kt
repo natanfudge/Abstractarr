@@ -13,10 +13,7 @@ import metautils.codegeneration.ClassAccess
 import metautils.codegeneration.ClassVariant
 import metautils.codegeneration.Visibility
 import metautils.codegeneration.asm.toAsmAccess
-import metautils.signature.ClassGenericType
-import metautils.signature.fromNameAndTypeArgs
-import metautils.signature.toClassfileName
-import metautils.signature.toTypeArgumentsOfNames
+import metautils.signature.*
 import metautils.util.*
 import java.nio.file.Path
 
@@ -174,7 +171,7 @@ internal fun buildAbstractionManifest(
             typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
         )
 
-        val newSignature = oldSignature.copy(superInterfaces = oldSignature.superInterfaces + insertedApiClass)
+        val newSignature = oldSignature.addSuperInterface(insertedApiClass)
         mcClassName to AbstractedClassInfo(
             apiClassName = apiClass.toSlashString(),
             newSignature = newSignature.toClassfileName()
