@@ -72,7 +72,7 @@ open class BuildMetaUtilsExtension(private val project: Project) {
                 val allInputs = inputChildren.filter { !it.isDirectory() }.toList()
                 val outputDir = project.file("testdata/mcJarWithInterfaces").toPath()
                 val abstractionManifestFile = project.file("testdata/abstractionManifest.json").toPath()
-                val abstractionManifest = Json(JsonConfiguration.Stable).parse(
+                val abstractionManifest = Json.decodeFromString(
                     MapSerializer(String.serializer(), AbstractedClassInfo.serializer()),
                     Files.readAllBytes(abstractionManifestFile).toString(Charset.defaultCharset())
                 )
