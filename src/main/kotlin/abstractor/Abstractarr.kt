@@ -106,16 +106,17 @@ class Abstractor /*private*/ constructor(
                         .any { it in abstractedClasses }
                 }
 
+                val allAbstractedClasses = (abstractedClasses + subclassesOfAbstractedClasses).distinct()
                 usage(
                     Abstractor(
-                        abstractedClasses = (abstractedClasses + subclassesOfAbstractedClasses).distinct(),
+                        abstractedClasses = allAbstractedClasses,
                         classNamesToClasses = classNamesToClasses,
                         index = index
                     )
                 )
 
 
-                buildAbstractionManifest(abstractedClasses, metadata.versionPackage)
+                buildAbstractionManifest(allAbstractedClasses, metadata.versionPackage)
             }
         }
     }
