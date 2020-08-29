@@ -876,7 +876,8 @@ internal data class ClassAbstractor(
 
     private fun <T : NameMappable<T>> T.remapToApiClass() = with(metadata.versionPackage) { remapToApiClass() }
     private fun <T : Mappable<T>> T.remapToApiClass() = with(metadata.versionPackage) { remapToApiClass() }
-    private fun <T : NameMappable<T>> List<T>.remapToApiClasses() = map { it.remapToApiClass() }
+//    private fun <T : NameMappable<T>> List<T>.remapToApiClasses() = map { it.remapToApiClass() }
+    private fun <T : Mappable<T>> List<T>.remapToApiClasses() = map { it.remapToApiClass() }
 
 //    private fun <T : GenericReturnType> JavaType<T>.remapToApiClass(): JavaType<T> =
 //
@@ -930,8 +931,8 @@ internal data class ClassAbstractor(
 
 // soft to do: not sure what to do when a generic class uses type arguments that were not abstracted
 internal fun VersionPackage.allApiInterfaceTypeArguments(classApi: ClassApi): List<TypeArgumentDeclaration> = when {
-    classApi.isStatic -> classApi.typeArguments.remapToApiClassesOld()
-    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapToApiClassesOld() }
+    classApi.isStatic -> classApi.typeArguments.remapToApiClasses()
+    else -> classApi.outerClassesToThis().flatMap { it.typeArguments.remapToApiClasses() }
 }
 
 //// soft to do: not sure what to do when a generic class uses type arguments that were not abstracted

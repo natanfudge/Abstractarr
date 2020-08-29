@@ -4,6 +4,7 @@ import metautils.asm.opCode
 import metautils.api.*
 import metautils.signature.ArrayGenericType
 import metautils.signature.ClassGenericType
+import metautils.signature.withArguments
 import metautils.signature.withSegments
 import metautils.util.ClasspathIndex
 import org.objectweb.asm.Opcodes
@@ -40,8 +41,7 @@ internal fun JavaClassType.pushAllTypeArgumentsToInnermostClass(): JavaClassType
 internal fun ClassGenericType.pushAllTypeArgumentsToInnermostClass(): ClassGenericType {
     val allArgs = classNameSegments.flatMap { it.typeArguments  }
     val modifiedSegments = classNameSegments.mapIndexed { index, segment ->
-        segment.copy(typeArguments =
-        if (index == classNameSegments.size - 1) allArgs.let { if (it.isEmpty()) listOf() else it } else listOf()
+        segment.withArguments(if (index == classNameSegments.size - 1) allArgs.let { if (it.isEmpty()) listOf() else it } else listOf()
         )
     }
     return this.withSegments(modifiedSegments)
