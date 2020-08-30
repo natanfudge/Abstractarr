@@ -71,7 +71,7 @@ internal data class ClassAbstractor(
             superClass = when {
                 classApi.isInterface -> null
                 metadata.fitToPublicApi -> getClosestNonMcSuperclass()?.remapToApiClass()
-                else -> classApi.asRawType()
+                else -> classApi.asRawJavaType()
             },
             annotations = classApi.annotations
         ) {
@@ -331,7 +331,7 @@ internal data class ClassAbstractor(
         if (metadata.fitToPublicApi) return
 
         val mcReturnType = method.returnType
-        val mcClassType = classApi.asRawType()
+        val mcClassType = classApi.asRawJavaType()
 
         val methodInfo = method.apiMethodInfo(remapParameters = false) {
             val call = MethodCall.Method(
@@ -378,7 +378,7 @@ internal data class ClassAbstractor(
         val mcReturnType = method.returnType
         val returnType = mcReturnType.remapToApiClass()
 
-        val mcClassType = classApi.asRawType()
+        val mcClassType = classApi.asRawJavaType()
 
         val noBody = metadata.fitToPublicApi && method.isAbstract && !forceBody
 
@@ -432,7 +432,7 @@ internal data class ClassAbstractor(
         // Abstract classes/interfaces can't be constructed directly
         if (classApi.isInterface) return
 
-        val mcClassType = classApi.asRawType()
+        val mcClassType = classApi.asRawJavaType()
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
             getJavadoc(method.documentable())?.let { addJavadoc(it) }
@@ -472,7 +472,7 @@ internal data class ClassAbstractor(
         val mcReturnType = type.copy(annotations = listOf(NotNullAnnotation))
         val returnType = mcReturnType.remapToApiClass()
 
-        val mcClassType = classApi.asRawType()
+        val mcClassType = classApi.asRawJavaType()
 
         val methodInfo = method.apiMethodInfo(remapParameters = true) {
             getJavadoc(method.documentable())?.let { addJavadoc(it) }
@@ -604,7 +604,7 @@ internal data class ClassAbstractor(
                 )
             ),
             visibility = field.visibility,
-            returnType = VoidGenericReturnType.noAnnotations(),
+            returnType = JavaType.Void,
             abstract = false,
             static = field.isStatic,
             final = metadata.fitToPublicApi,
@@ -624,7 +624,7 @@ internal data class ClassAbstractor(
         field: ClassApi.Field,
         castSelf: Boolean
     ): FieldExpression {
-        val mcClassType = classApi.asRawType()
+        val mcClassType = classApi.asRawJavaType()
         return FieldExpression(
             receiver = if (field.isStatic) ClassReceiver(classApi.asJvmType())
             else ThisExpression.let { if (castSelf) it.castFromApiToMc(mcClassType) else it },
@@ -660,7 +660,7 @@ internal data class ClassAbstractor(
                         MethodCall.Constructor(
                             constructing = constructedInnerClass,
                             parameters = apiPassedParameters(constructor),
-                            receiver = ThisExpression.castFromApiToMc(classApi.asRawType())
+                            receiver = ThisExpression.castFromApiToMc(classApi.asRawJavaType())
                         ).castFromMcToApi(constructedInnerClass)
                     )
                 )
@@ -679,9 +679,9 @@ internal data class ClassAbstractor(
             name = if (existsMethodWithSameDescriptorAsArrayFactory()) "${ArrayFactoryName}_factory" else ArrayFactoryName,
             visibility = Visibility.Public,
             parameters = listOf(
-                ParameterInfo(ArrayFactorySizeParamName, GenericsPrimitiveType.Int.noAnnotations(), javadoc = null)
+                ParameterInfo(ArrayFactorySizeParamName, JavaType.Int, javadoc = null)
             ),
-            returnType = ArrayGenericType(classApi.asType().type).annotated(NotNullAnnotation).remapToApiClass()
+            returnType = JavaType.fromTypeAndAnnotations(ArrayGenericType(classApi.asType().type),listOf(NotNullAnnotation)).remapToApiClass()
                 .pushAllArrayTypeArgumentsToInnermostClass(),
             abstract = false,
             final = false,
@@ -692,7 +692,7 @@ internal data class ClassAbstractor(
             addStatement(
                 ReturnStatement(
                     ArrayConstructor(
-                        classApi.asRawType(),
+                        classApi.asRawJavaType(),
                         size = VariableExpression(ArrayFactorySizeParamName)
                     )
                 )

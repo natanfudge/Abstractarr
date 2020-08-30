@@ -167,7 +167,7 @@ internal fun buildAbstractionManifest(
         val mcClassName = mcClass.name.toSlashString()
         val apiClass = mcClass.name.toApiClass()
         val oldSignature = mcClass.getSignature()
-        val insertedApiClass = ClassGenericType.fromNameAndTypeArgs(
+        val insertedApiClass = ClassGenericType.withTypeArgsInInnermostClass(
             name = apiClass,
             typeArgs = allApiInterfaceTypeArguments(mcClass).toTypeArgumentsOfNames()
         )
