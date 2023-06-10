@@ -5,6 +5,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 
+
 @Nullable
 public class TestAnnotations extends TestAbstractClass {
     public TestAnnotations() {
@@ -24,6 +25,10 @@ public class TestAnnotations extends TestAbstractClass {
     }
 
     public void foo(@Nullable int param1, @NotNull String param2) {
+
+    }
+
+    public static void apiAnoParam(@Nullable TestOtherClass foo){
 
     }
 

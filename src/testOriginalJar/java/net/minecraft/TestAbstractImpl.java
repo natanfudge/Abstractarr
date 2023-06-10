@@ -34,4 +34,8 @@ public class TestAbstractImpl extends TestAbstractClass implements TestInterface
     public int compareTo(TestAbstractImpl o) {
         return 0;
     }
+
+    public static void testStaticParam(TestOtherClass mc) {
+
+    }
 }

@@ -1,8 +1,12 @@
-import util.directChildren
-import java.nio.file.Paths
+import kotlinx.coroutines.runBlocking
+import metautils.asm.readToClassNode
+import metautils.testing.getResource
+import metautils.util.*
+import kotlin.system.measureTimeMillis
 
 fun main() {
-    val str = Paths.get("C:\\Users\\natan\\Desktop\\Abstractarr\\src\\testOriginalJar\\java\\net\\minecraft")
-        .directChildren().joinToString {"\"${it.fileName.toString().removeSuffix(".java")}\""}
-    println(str)
+//    val time = measureTimeMillis {
+//        TestAbstraction().testMc()
+//    }
+//    println("Millis = $time")
 }

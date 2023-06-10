@@ -1,0 +1,4 @@
+tiny	2	0	intermediary	named
+c	net/minecraft/class_2487	v1/net/minecraft/ITestConcreteClass
+	m	(Lv1/net/minecraft/ITestOtherClass;)I	method_25926	publicInt
+		c	Reads a {@link UUID} from its NBT representation in this {@code CompoundTag}.

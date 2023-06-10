@@ -1,16 +1,21 @@
 plugins {
 //    id "org.gradle.kotlin.kotlin-dsl" version "1.3.5"
-    id("org.jetbrains.kotlin.jvm") version "1.3.71"
+    id("org.jetbrains.kotlin.jvm") version "1.4.0"
+    id 'org.jetbrains.kotlin.plugin.serialization' version '1.4.0'
 }
 repositories {
     mavenCentral()
+    maven {
+        url  "https://dl.bintray.com/natanfudge/libs"
+    }
 }
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     implementation gradleApi()
     implementation("org.ow2.asm:asm:8.0.1")
     implementation 'org.ow2.asm:asm-tree:8.0.1'
-//    implementation("io.github.febb:MetaUtils:1.0-SNAPSHOT")
+    implementation("io.github.febb:metautils:0.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.0.0-RC") // JVM dependency
 }
 group 'io.github.febb'
 version '1.0-SNAPSHOT'

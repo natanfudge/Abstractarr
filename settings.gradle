@@ -1,8 +1,10 @@
 rootProject.name = 'Abstractarr'
 
-def utils = file("src/main/kotlin/metautils")
-if (!utils.exists() || utils.list().length == 0) {
-    throw new RuntimeException("MetaUtils directory is missing or empty. Make sure you use --recurse-submodules in git clone!")
+
+if (file("../MetaUtils-Releases").exists()) {
+    includeBuild("../MetaUtils-Releases") {
+        dependencySubstitution {
+            substitute module('io.github.febb:metautils') with project(':')
+        }
+    }
 }
-//includeBuild 'MetaUtils'
-//includeBuild 'MetaUtils/buildTools'
